@@ -67,8 +67,9 @@ export default async function DashboardPage() {
       : null;
 
   const now = new Date();
-  const dateStr = now.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
-  const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const TZ = 'America/Sao_Paulo';
+  const dateStr = now.toLocaleDateString('pt-BR', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' });
+  const timeStr = now.toLocaleTimeString('pt-BR', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
 
   const maxBairroCount = byBairro[0]?.count || 1;
   const statusDistTotal = statusDist.reduce((acc, s) => acc + s.count, 0) || 1;

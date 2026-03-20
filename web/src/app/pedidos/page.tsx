@@ -17,7 +17,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 interface Produto { qtd: number; produto: string; preco: number }
-interface HistoryEntry { status: string; criado_em: string }
+interface HistoryEntry { status: string; changed_at: string }
 interface Pedido {
   id: number;
   telefone_cliente: string;
@@ -116,7 +116,7 @@ export default function PedidosPage() {
     try {
       const updated = await api.concluirPedido(detail.id);
       setDetail(updated);
-      setHistory(h => [...h, { status: 'entregue', criado_em: new Date().toISOString() }]);
+      setHistory(h => [...h, { status: 'entregue', changed_at: new Date().toISOString() }]);
       fetchPedidos();
     } catch (e: any) { setActionError(e.message || 'Erro ao concluir'); }
     finally { setActionLoading(false); }
@@ -128,7 +128,7 @@ export default function PedidosPage() {
     try {
       const updated = await api.cancelarPedido(detail.id, motivoCancel || undefined);
       setDetail(updated);
-      setHistory(h => [...h, { status: 'cancelado', criado_em: new Date().toISOString() }]);
+      setHistory(h => [...h, { status: 'cancelado', changed_at: new Date().toISOString() }]);
       setShowCancelModal(false); setMotivoCancel('');
       fetchPedidos();
     } catch (e: any) { setActionError(e.message || 'Erro ao cancelar'); }
@@ -142,7 +142,7 @@ export default function PedidosPage() {
   };
 
   const fmtDate = (d: string) =>
-    new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+    new Date(d).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
 
   const fmtPhone = (p: string) => p.replace('@s.whatsapp.net', '').replace(/^55/, '');
   const isFinal = (s: string) => s === 'entregue' || s === 'cancelado';
@@ -397,7 +397,7 @@ export default function PedidosPage() {
                               <svg width="5" height="5" viewBox="0 0 5 5" fill="currentColor"><circle cx="2.5" cy="2.5" r="2.5" /></svg>
                               {STATUS_LABELS[h.status] ?? h.status}
                             </span>
-                            <p style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginTop: '2px' }}>{fmtDate(h.criado_em)}</p>
+                            <p style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginTop: '2px' }}>{fmtDate(h.changed_at)}</p>
                           </div>
                         </div>
                       ))}

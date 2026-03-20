@@ -25,8 +25,8 @@ export async function pedidosRoutes(server: FastifyInstance) {
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const dataQuery = `SELECT * FROM public.pedidos ${where} ORDER BY ${sortCol} ${sortDir} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-    const countQuery = `SELECT COUNT(*) FROM public.pedidos ${where}`;
+    const dataQuery = `SELECT * FROM public.telegas_pedidos ${where} ORDER BY ${sortCol} ${sortDir} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    const countQuery = `SELECT COUNT(*) FROM public.telegas_pedidos ${where}`;
     const countParams = [...params];
     params.push(limit, offset);
 
@@ -52,9 +52,9 @@ export async function pedidosRoutes(server: FastifyInstance) {
     try {
       const { rows } = await pool.query(
         `SELECT p.*, e.nome as entregador_nome, c.nome as nome_cliente
-         FROM public.pedidos p
-         LEFT JOIN public.entregadores e ON e.id = p.entregador_id
-         LEFT JOIN public.clientes c ON c.telefone = p.telefone_cliente
+         FROM public.telegas_pedidos p
+         LEFT JOIN public.telegas_entregadores e ON e.id = p.entregador_id
+         LEFT JOIN public.telegas_clientes c ON c.telefone = p.telefone_cliente
          WHERE p.id = $1`,
         [id]
       );
@@ -70,7 +70,7 @@ export async function pedidosRoutes(server: FastifyInstance) {
     const { id } = request.params as any;
     try {
       const { rows } = await pool.query(
-        'SELECT * FROM public.telegas_pedidos_status_history WHERE pedido_id = $1 ORDER BY criado_em ASC',
+        'SELECT * FROM public.telegas_pedidos_status_history WHERE pedido_id = $1 ORDER BY changed_at ASC',
         [id]
       );
       return rows;
@@ -80,7 +80,6 @@ export async function pedidosRoutes(server: FastifyInstance) {
     }
   });
 
-  // PATCH status genérico (para mudanças internas / entregador)
   server.patch('/:id/status', async (request, reply) => {
     const { id } = request.params as any;
     const { status } = request.body as any;
@@ -99,10 +98,9 @@ export async function pedidosRoutes(server: FastifyInstance) {
 
     try {
       const extra = timestampField[status];
-      const q = `UPDATE public.pedidos SET status = $1, ${extra} = NOW() WHERE id = $2 RETURNING *`;
+      const q = `UPDATE public.telegas_pedidos SET status = $1, ${extra} = NOW() WHERE id = $2 RETURNING *`;
       const { rows } = await pool.query(q, [status, id]);
       if (rows.length === 0) return reply.code(404).send({ error: 'Pedido não encontrado' });
-      // History recorded by DB trigger automatically
       return rows[0];
     } catch (err) {
       server.log.error(err);
@@ -110,24 +108,26 @@ export async function pedidosRoutes(server: FastifyInstance) {
     }
   });
 
-  // POST concluir — atualiza DB + dispara notificação via n8n
+  // Concluir pedido: atualiza DB + dispara notificação via n8n
   server.post('/:id/concluir', async (request, reply) => {
     const { id } = request.params as any;
     try {
       const { rows } = await pool.query(
-        `UPDATE public.pedidos SET status = 'entregue', entregue_em = NOW() WHERE id = $1 AND status NOT IN ('entregue','cancelado') RETURNING *`,
+        `UPDATE public.telegas_pedidos
+         SET status = 'entregue', entregue_em = NOW()
+         WHERE id = $1 AND status NOT IN ('entregue','cancelado')
+         RETURNING *`,
         [id]
       );
       if (rows.length === 0) {
         return reply.code(409).send({ error: 'Pedido não encontrado ou já finalizado' });
       }
-      // Dispara notificação no n8n de forma assíncrona
       if (N8N_ACAO_WEBHOOK) {
         fetch(N8N_ACAO_WEBHOOK, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ pedidoId: id, action: 'concluir', pedido: rows[0] }),
-        }).catch((e) => server.log.warn('n8n webhook falhou: ' + e.message));
+        }).catch((e: Error) => server.log.warn('n8n webhook falhou: ' + e.message));
       }
       return rows[0];
     } catch (err) {
@@ -136,25 +136,27 @@ export async function pedidosRoutes(server: FastifyInstance) {
     }
   });
 
-  // POST cancelar — atualiza DB + dispara notificação via n8n
+  // Cancelar pedido: atualiza DB + dispara notificação via n8n
   server.post('/:id/cancelar', async (request, reply) => {
     const { id } = request.params as any;
     const { motivo } = (request.body as any) || {};
     try {
       const { rows } = await pool.query(
-        `UPDATE public.pedidos SET status = 'cancelado', cancelado_em = NOW(), motivo_cancelamento = $2 WHERE id = $1 AND status NOT IN ('entregue','cancelado') RETURNING *`,
+        `UPDATE public.telegas_pedidos
+         SET status = 'cancelado', cancelado_em = NOW(), motivo_cancelamento = $2
+         WHERE id = $1 AND status NOT IN ('entregue','cancelado')
+         RETURNING *`,
         [id, motivo || null]
       );
       if (rows.length === 0) {
         return reply.code(409).send({ error: 'Pedido não encontrado ou já finalizado' });
       }
-      // Dispara notificação no n8n de forma assíncrona
       if (N8N_ACAO_WEBHOOK) {
         fetch(N8N_ACAO_WEBHOOK, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ pedidoId: id, action: 'cancelar', motivo: motivo || null, pedido: rows[0] }),
-        }).catch((e) => server.log.warn('n8n webhook falhou: ' + e.message));
+        }).catch((e: Error) => server.log.warn('n8n webhook falhou: ' + e.message));
       }
       return rows[0];
     } catch (err) {

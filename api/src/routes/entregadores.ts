@@ -16,8 +16,8 @@ export async function entregadoresRoutes(server: FastifyInstance) {
               AND DATE(p.created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE),
             0
           ) as tempo_medio_entrega
-        FROM public.entregadores e
-        LEFT JOIN public.pedidos p ON p.entregador_id = e.id
+        FROM public.telegas_entregadores e
+        LEFT JOIN public.telegas_pedidos p ON p.entregador_id = e.id
         GROUP BY e.id
         ORDER BY e.ativo DESC, e.nome
       `);

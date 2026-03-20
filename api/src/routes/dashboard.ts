@@ -5,9 +5,9 @@ export async function dashboardRoutes(server: FastifyInstance) {
   server.get('/summary', async (_request, reply) => {
     try {
       const [totalRes, entreguesRes, abertosRes] = await Promise.all([
-        pool.query(`SELECT COUNT(*) FROM public.pedidos WHERE DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE`),
-        pool.query(`SELECT COUNT(*) FROM public.pedidos WHERE status = 'entregue' AND DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE`),
-        pool.query(`SELECT COUNT(*) FROM public.pedidos WHERE status NOT IN ('entregue','cancelado')`),
+        pool.query(`SELECT COUNT(*) FROM public.telegas_pedidos WHERE DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE`),
+        pool.query(`SELECT COUNT(*) FROM public.telegas_pedidos WHERE status = 'entregue' AND DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE`),
+        pool.query(`SELECT COUNT(*) FROM public.telegas_pedidos WHERE status NOT IN ('entregue','cancelado')`),
       ]);
       return {
         hoje: {
@@ -27,7 +27,7 @@ export async function dashboardRoutes(server: FastifyInstance) {
       const [ticketRes, tempoEntregaRes, atrasadosRes] = await Promise.all([
         pool.query(`
           SELECT COALESCE(AVG(total::numeric), 0) as ticket_medio
-          FROM public.pedidos
+          FROM public.telegas_pedidos
           WHERE DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE
             AND status != 'cancelado'
         `),
@@ -38,10 +38,10 @@ export async function dashboardRoutes(server: FastifyInstance) {
               AND DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE),
             0
           ) as minutos
-          FROM public.pedidos
+          FROM public.telegas_pedidos
         `),
         pool.query(`
-          SELECT COUNT(*) as count FROM public.pedidos
+          SELECT COUNT(*) as count FROM public.telegas_pedidos
           WHERE
             (status = 'atribuido' AND atribuido_em IS NOT NULL AND atribuido_em < NOW() - INTERVAL '15 minutes')
             OR
@@ -63,7 +63,7 @@ export async function dashboardRoutes(server: FastifyInstance) {
     try {
       const { rows } = await pool.query(`
         SELECT status, COUNT(*) as count
-        FROM public.pedidos
+        FROM public.telegas_pedidos
         WHERE DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE
         GROUP BY status
         ORDER BY count DESC
@@ -82,7 +82,7 @@ export async function dashboardRoutes(server: FastifyInstance) {
           COALESCE(NULLIF(TRIM(bairro), ''), 'Não informado') as bairro,
           COUNT(*) as count,
           COALESCE(SUM(total::numeric), 0) as total
-        FROM public.pedidos
+        FROM public.telegas_pedidos
         WHERE DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE
         GROUP BY bairro
         ORDER BY count DESC
@@ -113,8 +113,8 @@ export async function dashboardRoutes(server: FastifyInstance) {
               AND DATE(p.created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE),
             0
           ) as tempo_medio
-        FROM public.pedidos p
-        LEFT JOIN public.entregadores e ON e.id = p.entregador_id
+        FROM public.telegas_pedidos p
+        LEFT JOIN public.telegas_entregadores e ON e.id = p.entregador_id
         WHERE DATE(p.created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE
         GROUP BY e.id, e.nome
         ORDER BY entregues_hoje DESC
