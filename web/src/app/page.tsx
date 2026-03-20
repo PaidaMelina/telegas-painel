@@ -281,6 +281,7 @@ export default async function DashboardPage() {
             </h2>
             <Link 
               href="/pedidos"
+              className="link-accent"
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -295,8 +296,6 @@ export default async function DashboardPage() {
                 textDecoration: 'none',
                 transition: 'all 0.2s ease'
               }}
-              onMouseEnter={(e: any) => e.currentTarget.style.background = 'var(--accent-glow)'}
-              onMouseLeave={(e: any) => e.currentTarget.style.background = 'var(--accent-dim)'}
             >
               VER TODOS <ArrowRight size={12} />
             </Link>
