@@ -9,6 +9,10 @@ export async function setupRoutes(server: FastifyInstance) {
     return { status: 'ok' };
   });
 
+  server.get('/api/version', async () => {
+    return { version: '1.0.1', deployed_at: '2026-03-20' };
+  });
+
   server.get('/api/db-check', async () => {
     try {
       const result = await pool.query('SELECT NOW() as time, current_database() as db');
