@@ -33,35 +33,50 @@ export const api = {
 
   getPedidos: async (params?: Record<string, string>) => {
     const query = new URLSearchParams(params).toString();
-    const res = await fetch(`${API_URL}/pedidos?${query}`, { next: { revalidate: 0 } });
+    const res = await fetch(`${API_URL}/pedidos?${query}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch pedidos');
     return res.json();
   },
 
   getPedidoDetails: async (id: string) => {
-    const res = await fetch(`${API_URL}/pedidos/${id}`, { next: { revalidate: 0 } });
+    const res = await fetch(`${API_URL}/pedidos/${id}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch pedido details');
     return res.json();
   },
 
   getPedidoHistory: async (id: string) => {
-    const res = await fetch(`${API_URL}/pedidos/${id}/history`, { next: { revalidate: 0 } });
+    const res = await fetch(`${API_URL}/pedidos/${id}/history`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch pedido history');
     return res.json();
   },
 
-  updatePedidoStatus: async (id: number, status: string) => {
-    const res = await fetch(`${API_URL}/pedidos/${id}/status`, {
-      method: 'PATCH',
+  concluirPedido: async (id: number) => {
+    const res = await fetch(`${API_URL}/pedidos/${id}/concluir`, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
     });
-    if (!res.ok) throw new Error('Failed to update status');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as any).error || 'Erro ao concluir pedido');
+    }
+    return res.json();
+  },
+
+  cancelarPedido: async (id: number, motivo?: string) => {
+    const res = await fetch(`${API_URL}/pedidos/${id}/cancelar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ motivo: motivo || null }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as any).error || 'Erro ao cancelar pedido');
+    }
     return res.json();
   },
 
   getEntregadores: async () => {
-    const res = await fetch(`${API_URL}/entregadores`, { next: { revalidate: 0 } });
+    const res = await fetch(`${API_URL}/entregadores`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch entregadores');
     return res.json();
   },

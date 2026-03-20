@@ -8,14 +8,16 @@ export async function entregadoresRoutes(server: FastifyInstance) {
         SELECT
           e.id, e.nome, e.telefone, e.ativo, e.created_at,
           COUNT(p.id) FILTER (WHERE p.status IN ('atribuido','saiu_para_entrega')) as pedidos_abertos,
-          COUNT(p.id) FILTER (WHERE p.status = 'entregue' AND DATE(p.created_at) = CURRENT_DATE) as entregues_hoje,
+          COUNT(p.id) FILTER (WHERE p.status = 'entregue'
+            AND DATE(p.created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE) as entregues_hoje,
           COALESCE(
-            AVG(EXTRACT(EPOCH FROM (p.entregue_em - p.atribuido_em))/60)
-            FILTER (WHERE p.entregue_em IS NOT NULL AND p.atribuido_em IS NOT NULL AND DATE(p.created_at) = CURRENT_DATE),
+            AVG(EXTRACT(EPOCH FROM (p.entregue_em - p.atribuido_em)) / 60)
+            FILTER (WHERE p.entregue_em IS NOT NULL AND p.atribuido_em IS NOT NULL
+              AND DATE(p.created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE),
             0
           ) as tempo_medio_entrega
-        FROM public.telegas_entregadores e
-        LEFT JOIN public.telegas_pedidos p ON p.entregador_id = e.id
+        FROM public.entregadores e
+        LEFT JOIN public.pedidos p ON p.entregador_id = e.id
         GROUP BY e.id
         ORDER BY e.ativo DESC, e.nome
       `);

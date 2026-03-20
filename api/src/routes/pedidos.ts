@@ -1,6 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { pool } from '../db';
 
+const N8N_ACAO_WEBHOOK = process.env.N8N_ACAO_WEBHOOK_URL || '';
+
 export async function pedidosRoutes(server: FastifyInstance) {
   server.get('/', async (request, reply) => {
     const { status, limit = 20, offset = 0, search, sort = 'created_at', dir = 'desc' } = request.query as any;
@@ -18,20 +20,21 @@ export async function pedidosRoutes(server: FastifyInstance) {
     }
     if (search) {
       params.push(`%${search}%`);
-      conditions.push(`(telefone_cliente ILIKE $${params.length} OR endereco ILIKE $${params.length})`);
+      const idx = params.length;
+      conditions.push(`(telefone_cliente ILIKE $${idx} OR endereco ILIKE $${idx})`);
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const query = `SELECT * FROM public.telegas_pedidos ${where} ORDER BY ${sortCol} ${sortDir} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    const dataQuery = `SELECT * FROM public.pedidos ${where} ORDER BY ${sortCol} ${sortDir} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    const countQuery = `SELECT COUNT(*) FROM public.pedidos ${where}`;
+    const countParams = [...params];
     params.push(limit, offset);
 
     try {
-      const { rows } = await pool.query(query, params);
-
-      const countParams2 = params.slice(0, params.length - 2);
-      const countQuery = `SELECT COUNT(*) FROM public.telegas_pedidos ${where}`;
-      const { rows: countRows } = await pool.query(countQuery, countParams2);
-
+      const [{ rows }, { rows: countRows }] = await Promise.all([
+        pool.query(dataQuery, params),
+        pool.query(countQuery, countParams),
+      ]);
       return {
         data: rows,
         total: parseInt(countRows[0].count, 10),
@@ -47,10 +50,15 @@ export async function pedidosRoutes(server: FastifyInstance) {
   server.get('/:id', async (request, reply) => {
     const { id } = request.params as any;
     try {
-      const { rows } = await pool.query('SELECT * FROM public.telegas_pedidos WHERE id = $1', [id]);
-      if (rows.length === 0) {
-        return reply.code(404).send({ error: 'Pedido não encontrado' });
-      }
+      const { rows } = await pool.query(
+        `SELECT p.*, e.nome as entregador_nome, c.nome as nome_cliente
+         FROM public.pedidos p
+         LEFT JOIN public.entregadores e ON e.id = p.entregador_id
+         LEFT JOIN public.clientes c ON c.telefone = p.telefone_cliente
+         WHERE p.id = $1`,
+        [id]
+      );
+      if (rows.length === 0) return reply.code(404).send({ error: 'Pedido não encontrado' });
       return rows[0];
     } catch (err) {
       server.log.error(err);
@@ -61,7 +69,10 @@ export async function pedidosRoutes(server: FastifyInstance) {
   server.get('/:id/history', async (request, reply) => {
     const { id } = request.params as any;
     try {
-      const { rows } = await pool.query('SELECT * FROM public.telegas_pedidos_status_history WHERE pedido_id = $1 ORDER BY criado_em ASC', [id]);
+      const { rows } = await pool.query(
+        'SELECT * FROM public.telegas_pedidos_status_history WHERE pedido_id = $1 ORDER BY criado_em ASC',
+        [id]
+      );
       return rows;
     } catch (err) {
       server.log.error(err);
@@ -69,6 +80,7 @@ export async function pedidosRoutes(server: FastifyInstance) {
     }
   });
 
+  // PATCH status genérico (para mudanças internas / entregador)
   server.patch('/:id/status', async (request, reply) => {
     const { id } = request.params as any;
     const { status } = request.body as any;
@@ -82,25 +94,72 @@ export async function pedidosRoutes(server: FastifyInstance) {
       atribuido: 'atribuido_em',
       saiu_para_entrega: 'saiu_entrega_em',
       entregue: 'entregue_em',
+      cancelado: 'cancelado_em',
     };
 
     try {
       const extra = timestampField[status];
-      const q = extra
-        ? `UPDATE public.telegas_pedidos SET status = $1, ${extra} = NOW() WHERE id = $2 RETURNING *`
-        : `UPDATE public.telegas_pedidos SET status = $1 WHERE id = $2 RETURNING *`;
+      const q = `UPDATE public.pedidos SET status = $1, ${extra} = NOW() WHERE id = $2 RETURNING *`;
       const { rows } = await pool.query(q, [status, id]);
       if (rows.length === 0) return reply.code(404).send({ error: 'Pedido não encontrado' });
-
-      await pool.query(
-        'INSERT INTO public.telegas_pedidos_status_history (pedido_id, status) VALUES ($1, $2)',
-        [id, status]
-      );
-
+      // History recorded by DB trigger automatically
       return rows[0];
     } catch (err) {
       server.log.error(err);
       return reply.code(500).send({ error: 'Erro ao atualizar status' });
+    }
+  });
+
+  // POST concluir — atualiza DB + dispara notificação via n8n
+  server.post('/:id/concluir', async (request, reply) => {
+    const { id } = request.params as any;
+    try {
+      const { rows } = await pool.query(
+        `UPDATE public.pedidos SET status = 'entregue', entregue_em = NOW() WHERE id = $1 AND status NOT IN ('entregue','cancelado') RETURNING *`,
+        [id]
+      );
+      if (rows.length === 0) {
+        return reply.code(409).send({ error: 'Pedido não encontrado ou já finalizado' });
+      }
+      // Dispara notificação no n8n de forma assíncrona
+      if (N8N_ACAO_WEBHOOK) {
+        fetch(N8N_ACAO_WEBHOOK, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pedidoId: id, action: 'concluir', pedido: rows[0] }),
+        }).catch((e) => server.log.warn('n8n webhook falhou: ' + e.message));
+      }
+      return rows[0];
+    } catch (err) {
+      server.log.error(err);
+      return reply.code(500).send({ error: 'Erro ao concluir pedido' });
+    }
+  });
+
+  // POST cancelar — atualiza DB + dispara notificação via n8n
+  server.post('/:id/cancelar', async (request, reply) => {
+    const { id } = request.params as any;
+    const { motivo } = (request.body as any) || {};
+    try {
+      const { rows } = await pool.query(
+        `UPDATE public.pedidos SET status = 'cancelado', cancelado_em = NOW(), motivo_cancelamento = $2 WHERE id = $1 AND status NOT IN ('entregue','cancelado') RETURNING *`,
+        [id, motivo || null]
+      );
+      if (rows.length === 0) {
+        return reply.code(409).send({ error: 'Pedido não encontrado ou já finalizado' });
+      }
+      // Dispara notificação no n8n de forma assíncrona
+      if (N8N_ACAO_WEBHOOK) {
+        fetch(N8N_ACAO_WEBHOOK, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pedidoId: id, action: 'cancelar', motivo: motivo || null, pedido: rows[0] }),
+        }).catch((e) => server.log.warn('n8n webhook falhou: ' + e.message));
+      }
+      return rows[0];
+    } catch (err) {
+      server.log.error(err);
+      return reply.code(500).send({ error: 'Erro ao cancelar pedido' });
     }
   });
 }
