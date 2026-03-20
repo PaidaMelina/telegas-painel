@@ -169,3 +169,102 @@ body::after {
 .link-accent:hover {
   background: var(--accent-glow) !important;
 }
+
+/* ── Sidebar ── */
+.sidebar {
+  width: 220px;
+  min-height: 100vh;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  flex-shrink: 0;
+  z-index: 50;
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 26px 20px 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-brand {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-family: var(--font-barlow);
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 12px;
+  flex: 1;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-family: var(--font-space-mono);
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.sidebar-link:hover {
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+}
+
+.sidebar-link.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: rgba(245, 158, 11, 0.18);
+}
+
+.sidebar-footer {
+  padding: 18px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-live-label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-family: var(--font-space-mono);
+}
+
+/* ── Status colors for table row left borders ── */
+.row-novo        { border-left: 3px solid #444 !important; }
+.row-atribuido   { border-left: 3px solid #fbbf24 !important; }
+.row-saiu_para_entrega { border-left: 3px solid #60a5fa !important; }
+.row-entregue    { border-left: 3px solid #34d399 !important; }
+.row-cancelado   { border-left: 3px solid #f87171 !important; }
+
+/* ── Status novo badge ── */
+.status-novo {
+  background: rgba(102, 102, 102, 0.10);
+  color: #888;
+  border: 1px solid rgba(102, 102, 102, 0.22);
+}

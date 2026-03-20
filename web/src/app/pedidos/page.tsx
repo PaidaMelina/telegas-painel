@@ -3,10 +3,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import {
-  Package, ChevronLeft, ChevronRight, ArrowLeft, X,
+  Package, ChevronLeft, ChevronRight, X,
   Clock, MapPin, Phone, Hash, ShoppingBag, AlertTriangle,
 } from 'lucide-react';
-import Link from 'next/link';
 
 const STATUS_LABELS: Record<string, string> = {
   atribuido: 'Atribuído',
@@ -14,6 +13,14 @@ const STATUS_LABELS: Record<string, string> = {
   entregue: 'Entregue',
   cancelado: 'Cancelado',
   novo: 'Novo',
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  atribuido: '#fbbf24',
+  saiu_para_entrega: '#60a5fa',
+  entregue: '#34d399',
+  cancelado: '#f87171',
+  novo: '#555',
 };
 
 interface Produto { qtd: number; produto: string; preco: number }
@@ -148,22 +155,24 @@ export default function PedidosPage() {
   const isFinal = (s: string) => s === 'entregue' || s === 'cancelado';
 
   return (
-    <main className="min-h-screen relative z-10" style={{ padding: '40px 32px', maxWidth: '1280px', margin: '0 auto' }}>
+    <main className="min-h-screen relative z-10" style={{ padding: '32px 28px', maxWidth: '1160px' }}>
 
-      <header className="fade-up" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <Link href="/" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '8px', background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)', textDecoration: 'none' }}>
-            <ArrowLeft size={18} />
-          </Link>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Package size={20} style={{ color: 'var(--accent)' }} />
-              <h1 style={{ fontSize: '24px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'var(--font-barlow)' }}>Gestão de Pedidos</h1>
-            </div>
-            <p style={{ fontSize: '11px', color: 'var(--text-secondary)', letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: 'var(--font-space-mono)', marginTop: '4px' }}>Histórico e acompanhamento total</p>
+      <header className="fade-up" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '24px' }}>
+        <div>
+          <p style={{ fontSize: '10px', letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginBottom: '6px' }}>
+            Gestão
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Package size={20} style={{ color: 'var(--accent)' }} />
+            <h1 style={{ fontSize: '30px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--font-barlow)', lineHeight: 1 }}>Pedidos</h1>
           </div>
+          {total > 0 && (
+            <p style={{ fontSize: '11px', color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-space-mono)', marginTop: '6px' }}>
+              {total} registros encontrados
+            </p>
+          )}
         </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
           <div style={{ display: 'flex', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '4px', overflow: 'hidden' }}>
             <input
               value={searchInput}
@@ -182,16 +191,24 @@ export default function PedidosPage() {
         </div>
       </header>
 
-      <div className="fade-up-1" style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+      <div className="fade-up-1" style={{ display: 'flex', gap: '6px', marginBottom: '20px' }}>
         {(['', 'atribuido', 'saiu_para_entrega', 'entregue', 'cancelado'] as const).map(s => (
-          <button key={s} onClick={() => handleStatusChange(s)} style={{ fontSize: '10px', padding: '6px 14px', borderRadius: '4px', background: statusFilter === s ? 'var(--accent)' : 'var(--bg-surface)', color: statusFilter === s ? 'var(--bg-base)' : 'var(--text-secondary)', border: '1px solid', borderColor: statusFilter === s ? 'var(--accent)' : 'var(--border)', fontFamily: 'var(--font-space-mono)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', transition: 'all 0.2s ease' }}>
+          <button key={s} onClick={() => handleStatusChange(s)} style={{
+            fontSize: '10px', padding: '6px 14px', borderRadius: '4px',
+            background: statusFilter === s ? (s === '' ? 'var(--accent)' : (STATUS_COLORS[s] ?? 'var(--accent)')) : 'var(--bg-surface)',
+            color: statusFilter === s ? (s === '' ? 'var(--bg-base)' : '#080808') : 'var(--text-secondary)',
+            border: '1px solid',
+            borderColor: statusFilter === s ? (s === '' ? 'var(--accent)' : (STATUS_COLORS[s] ?? 'var(--accent)')) : 'var(--border)',
+            fontFamily: 'var(--font-space-mono)', fontWeight: 700, textTransform: 'uppercase',
+            letterSpacing: '0.05em', cursor: 'pointer', transition: 'all 0.15s ease'
+          }}>
             {s === '' ? 'Todos' : STATUS_LABELS[s]}
           </button>
         ))}
       </div>
 
       {erro && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '14px 18px', borderRadius: '6px', border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.07)', color: '#f87171', marginBottom: '24px', fontSize: '13px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', borderRadius: '6px', border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.07)', color: '#f87171', marginBottom: '20px', fontSize: '13px' }}>
           <AlertTriangle size={15} /><span>{erro}</span>
         </div>
       )}
@@ -208,7 +225,7 @@ export default function PedidosPage() {
                 { label: 'Total', col: 'total' },
                 { label: 'Status', col: null },
               ].map(({ label, col }) => (
-                <th key={label} onClick={col ? () => toggleSort(col) : undefined} style={{ textAlign: 'left', padding: '14px 20px', fontSize: '10px', fontWeight: 700, color: col && sortBy === col ? 'var(--accent)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'var(--font-space-mono)', cursor: col ? 'pointer' : 'default', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                <th key={label} onClick={col ? () => toggleSort(col) : undefined} style={{ textAlign: 'left', padding: '12px 18px', fontSize: '10px', fontWeight: 700, color: col && sortBy === col ? 'var(--accent)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: 'var(--font-space-mono)', cursor: col ? 'pointer' : 'default', userSelect: 'none', whiteSpace: 'nowrap' }}>
                   {label}{col && sortBy === col ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}
                 </th>
               ))}
@@ -221,13 +238,13 @@ export default function PedidosPage() {
               <tr><td colSpan={6} style={{ textAlign: 'center', padding: '60px', color: 'var(--text-muted)', fontSize: '13px', fontFamily: 'var(--font-space-mono)' }}>Nenhum pedido encontrado.</td></tr>
             ) : (
               pedidos.map(p => (
-                <tr key={p.id} className="orders-row" onClick={() => openDetail(p.id)} style={{ cursor: 'pointer' }}>
-                  <td style={{ padding: '16px 20px', fontSize: '13px', fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-space-mono)' }}>#{p.id}</td>
-                  <td style={{ padding: '16px 20px', fontSize: '13px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{fmtDate(p.created_at)}</td>
-                  <td style={{ padding: '16px 20px', fontSize: '13px' }}><div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{fmtPhone(p.telefone_cliente)}</div></td>
-                  <td style={{ padding: '16px 20px', fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '240px' }}><span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.endereco}{p.bairro ? ` (${p.bairro})` : ''}</span></td>
-                  <td style={{ padding: '16px 20px', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-space-mono)', whiteSpace: 'nowrap' }}>R$ {parseFloat(p.total).toFixed(2)}</td>
-                  <td style={{ padding: '16px 20px' }}>
+                <tr key={p.id} className="orders-row" onClick={() => openDetail(p.id)} style={{ cursor: 'pointer', background: 'var(--bg-surface)' }}>
+                  <td style={{ padding: '14px 18px', fontSize: '13px', fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-space-mono)', borderLeft: `3px solid ${STATUS_COLORS[p.status] ?? '#333'}` }}>#{p.id}</td>
+                  <td style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', fontFamily: 'var(--font-space-mono)' }}>{fmtDate(p.created_at)}</td>
+                  <td style={{ padding: '14px 18px', fontSize: '13px' }}><div style={{ fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-space-mono)' }}>{fmtPhone(p.telefone_cliente)}</div></td>
+                  <td style={{ padding: '14px 18px', fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '220px' }}><span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.endereco}{p.bairro ? ` (${p.bairro})` : ''}</span></td>
+                  <td style={{ padding: '14px 18px', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-space-mono)', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>R$ {parseFloat(p.total).toFixed(2)}</td>
+                  <td style={{ padding: '14px 18px' }}>
                     <span className={`status-badge status-${p.status}`}>
                       <svg width="5" height="5" viewBox="0 0 5 5" fill="currentColor"><circle cx="2.5" cy="2.5" r="2.5" /></svg>
                       {STATUS_LABELS[p.status] ?? p.status}
@@ -239,7 +256,7 @@ export default function PedidosPage() {
           </tbody>
         </table>
 
-        <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-surface-2)', borderTop: '1px solid var(--border)' }}>
+        <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-surface-2)', borderTop: '1px solid var(--border)' }}>
           <p style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)' }}>
             {total === 0 ? 'Nenhum registro' : `Mostrando ${Math.min(offset + 1, total)}–${Math.min(offset + pedidos.length, total)} de ${total} pedidos`}
           </p>
@@ -253,11 +270,11 @@ export default function PedidosPage() {
       {/* ── Detail Drawer ── */}
       {selectedId !== null && (
         <div onClick={closeDetail} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end' }}>
-          <div onClick={e => e.stopPropagation()} style={{ width: '420px', height: '100vh', background: 'var(--bg-surface)', borderLeft: '1px solid var(--border)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '440px', height: '100vh', background: 'var(--bg-surface)', borderLeft: '1px solid var(--border)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
 
-            <div style={{ padding: '24px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+            <div style={{ padding: '22px 24px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Hash size={16} style={{ color: 'var(--accent)' }} />
+                <Hash size={15} style={{ color: 'var(--accent)' }} />
                 <span style={{ fontSize: '16px', fontWeight: 800, fontFamily: 'var(--font-barlow)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Pedido #{selectedId}</span>
               </div>
               <button onClick={closeDetail} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}><X size={18} /></button>
@@ -269,8 +286,8 @@ export default function PedidosPage() {
               <div style={{ flex: 1, overflowY: 'auto' }}>
 
                 {/* Status + ações */}
-                <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
-                  <span className={`status-badge status-${detail.status}`} style={{ display: 'inline-flex', marginBottom: '16px' }}>
+                <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', borderLeft: `3px solid ${STATUS_COLORS[detail.status] ?? '#333'}` }}>
+                  <span className={`status-badge status-${detail.status}`} style={{ display: 'inline-flex', marginBottom: '14px' }}>
                     <svg width="5" height="5" viewBox="0 0 5 5" fill="currentColor"><circle cx="2.5" cy="2.5" r="2.5" /></svg>
                     {STATUS_LABELS[detail.status] ?? detail.status}
                   </span>
@@ -288,7 +305,7 @@ export default function PedidosPage() {
                         onClick={() => setShowCancelModal(true)}
                         style={{ fontSize: '10px', padding: '8px 16px', borderRadius: '4px', border: '1px solid rgba(248,113,113,0.3)', background: 'rgba(248,113,113,0.1)', color: '#f87171', fontFamily: 'var(--font-space-mono)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', opacity: actionLoading ? 0.5 : 1 }}
                       >
-                        ✕ Cancelar Pedido
+                        ✕ Cancelar
                       </button>
                     </div>
                   )}
@@ -316,9 +333,9 @@ export default function PedidosPage() {
                 )}
 
                 {/* Dados do pedido */}
-                <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                    <Phone size={14} style={{ color: 'var(--text-muted)', marginTop: '2px', flexShrink: 0 }} />
+                    <Phone size={13} style={{ color: 'var(--text-muted)', marginTop: '2px', flexShrink: 0 }} />
                     <div>
                       <p style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '2px' }}>Cliente</p>
                       <p style={{ fontSize: '13px', color: 'var(--text-primary)', fontFamily: 'var(--font-space-mono)' }}>{fmtPhone(detail.telefone_cliente)}</p>
@@ -326,7 +343,7 @@ export default function PedidosPage() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                    <MapPin size={14} style={{ color: 'var(--text-muted)', marginTop: '2px', flexShrink: 0 }} />
+                    <MapPin size={13} style={{ color: 'var(--text-muted)', marginTop: '2px', flexShrink: 0 }} />
                     <div>
                       <p style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '2px' }}>Endereço</p>
                       <p style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{detail.endereco}</p>
@@ -334,7 +351,7 @@ export default function PedidosPage() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                    <Clock size={14} style={{ color: 'var(--text-muted)', marginTop: '2px', flexShrink: 0 }} />
+                    <Clock size={13} style={{ color: 'var(--text-muted)', marginTop: '2px', flexShrink: 0 }} />
                     <div>
                       <p style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '2px' }}>Criado em</p>
                       <p style={{ fontSize: '13px', color: 'var(--text-primary)', fontFamily: 'var(--font-space-mono)' }}>{fmtDate(detail.created_at)}</p>
@@ -342,7 +359,7 @@ export default function PedidosPage() {
                   </div>
                   {detail.entregador_nome && (
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                      <Package size={14} style={{ color: 'var(--text-muted)', marginTop: '2px', flexShrink: 0 }} />
+                      <Package size={13} style={{ color: 'var(--text-muted)', marginTop: '2px', flexShrink: 0 }} />
                       <div>
                         <p style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '2px' }}>Entregador</p>
                         <p style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{detail.entregador_nome}</p>
@@ -358,9 +375,9 @@ export default function PedidosPage() {
                 </div>
 
                 {/* Produtos */}
-                <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
-                    <ShoppingBag size={14} style={{ color: 'var(--text-muted)', marginTop: '1px', flexShrink: 0 }} />
+                    <ShoppingBag size={13} style={{ color: 'var(--text-muted)', marginTop: '1px', flexShrink: 0 }} />
                     <p style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Produtos</p>
                   </div>
                   {Array.isArray(detail.produtos) && detail.produtos.map((pr, i) => (
@@ -383,13 +400,13 @@ export default function PedidosPage() {
 
                 {/* Timeline */}
                 {history.length > 0 && (
-                  <div style={{ padding: '20px 24px' }}>
+                  <div style={{ padding: '18px 24px' }}>
                     <p style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '16px' }}>Timeline de Status</p>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       {history.map((h, i) => (
                         <div key={i} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: h.status === 'entregue' ? '#34d399' : h.status === 'cancelado' ? '#f87171' : 'var(--accent)', marginTop: '4px' }} />
+                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: STATUS_COLORS[h.status] ?? 'var(--accent)', marginTop: '4px' }} />
                             {i < history.length - 1 && <div style={{ width: '1px', flex: 1, background: 'var(--border)', minHeight: '20px', marginTop: '2px' }} />}
                           </div>
                           <div style={{ paddingBottom: i < history.length - 1 ? '16px' : '0' }}>

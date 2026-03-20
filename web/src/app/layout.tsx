@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Barlow_Condensed, Space_Mono } from "next/font/google";
 import "./globals.css";
+import Sidebar from "@/components/Sidebar";
 
 const barlowCondensed = Barlow_Condensed({
   variable: "--font-barlow",
@@ -29,7 +30,12 @@ export default function RootLayout({
       lang="pt-BR"
       className={`${barlowCondensed.variable} ${spaceMono.variable} h-full`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full" style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch' }}>
+        <Sidebar />
+        <div style={{ flex: 1, minWidth: 0, overflowX: 'hidden' }}>
+          {children}
+        </div>
+      </body>
     </html>
   );
 }
