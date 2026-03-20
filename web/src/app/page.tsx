@@ -1,5 +1,6 @@
 import { api } from '@/lib/api';
-import { Flame, Package, CheckCircle2, Truck, AlertTriangle } from 'lucide-react';
+import { Flame, Package, CheckCircle2, Truck, AlertTriangle, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
 
 export const revalidate = 30;
 
@@ -258,40 +259,48 @@ export default async function DashboardPage() {
 
       {/* ── Orders Table ── */}
       <div className="fade-up-2">
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '16px',
-          }}
-        >
-          <h2
+          <div
             style={{
-              fontSize: '10px',
-              letterSpacing: '0.18em',
-              textTransform: 'uppercase',
-              fontWeight: 700,
-              color: 'var(--text-secondary)',
-              fontFamily: 'var(--font-space-mono)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '16px',
             }}
           >
-            Pedidos Recentes
-          </h2>
-          <span
-            style={{
-              fontSize: '10px',
-              padding: '3px 10px',
-              borderRadius: '3px',
-              background: 'var(--accent-dim)',
-              color: 'var(--accent)',
-              fontFamily: 'var(--font-space-mono)',
-              letterSpacing: '0.06em',
-            }}
-          >
-            {pedidos.length} registro{pedidos.length !== 1 ? 's' : ''}
-          </span>
-        </div>
+            <h2
+              style={{
+                fontSize: '10px',
+                letterSpacing: '0.18em',
+                textTransform: 'uppercase',
+                fontWeight: 700,
+                color: 'var(--text-secondary)',
+                fontFamily: 'var(--font-space-mono)',
+              }}
+            >
+              Pedidos Recentes
+            </h2>
+            <Link 
+              href="/pedidos"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '10px',
+                padding: '3px 10px',
+                borderRadius: '3px',
+                background: 'var(--accent-dim)',
+                color: 'var(--accent)',
+                fontFamily: 'var(--font-space-mono)',
+                letterSpacing: '0.06em',
+                textDecoration: 'none',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e: any) => e.currentTarget.style.background = 'var(--accent-glow)'}
+              onMouseLeave={(e: any) => e.currentTarget.style.background = 'var(--accent-dim)'}
+            >
+              VER TODOS <ArrowRight size={12} />
+            </Link>
+          </div>
 
         <div
           style={{
