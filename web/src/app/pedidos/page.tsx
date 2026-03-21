@@ -16,11 +16,11 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  atribuido: '#fbbf24',
-  saiu_para_entrega: '#60a5fa',
-  entregue: '#34d399',
-  cancelado: '#f87171',
-  novo: '#555',
+  atribuido: '#c27803',
+  saiu_para_entrega: '#2557e7',
+  entregue: '#047857',
+  cancelado: '#c81e1e',
+  novo: '#94a3b8',
 };
 
 interface Produto { qtd: number; produto: string; preco: number }
@@ -196,7 +196,7 @@ export default function PedidosPage() {
           <button key={s} onClick={() => handleStatusChange(s)} style={{
             fontSize: '10px', padding: '6px 14px', borderRadius: '4px',
             background: statusFilter === s ? (s === '' ? 'var(--accent)' : (STATUS_COLORS[s] ?? 'var(--accent)')) : 'var(--bg-surface)',
-            color: statusFilter === s ? (s === '' ? 'var(--bg-base)' : '#080808') : 'var(--text-secondary)',
+            color: statusFilter === s ? (s === '' ? '#ffffff' : '#ffffff') : 'var(--text-secondary)',
             border: '1px solid',
             borderColor: statusFilter === s ? (s === '' ? 'var(--accent)' : (STATUS_COLORS[s] ?? 'var(--accent)')) : 'var(--border)',
             fontFamily: 'var(--font-space-mono)', fontWeight: 700, textTransform: 'uppercase',
@@ -208,7 +208,7 @@ export default function PedidosPage() {
       </div>
 
       {erro && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', borderRadius: '6px', border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.07)', color: '#f87171', marginBottom: '20px', fontSize: '13px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', borderRadius: '6px', border: '1px solid #fca5a5', background: '#fff1f1', color: '#991b1b', marginBottom: '20px', fontSize: '13px' }}>
           <AlertTriangle size={15} /><span>{erro}</span>
         </div>
       )}
@@ -269,7 +269,7 @@ export default function PedidosPage() {
 
       {/* ── Detail Drawer ── */}
       {selectedId !== null && (
-        <div onClick={closeDetail} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end' }}>
+        <div onClick={closeDetail} style={{ position: 'fixed', inset: 0, background: 'rgba(13,20,36,0.5)', zIndex: 100, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end' }}>
           <div onClick={e => e.stopPropagation()} style={{ width: '440px', height: '100vh', background: 'var(--bg-surface)', borderLeft: '1px solid var(--border)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
 
             <div style={{ padding: '22px 24px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
@@ -296,35 +296,35 @@ export default function PedidosPage() {
                       <button
                         disabled={actionLoading}
                         onClick={handleConcluir}
-                        style={{ fontSize: '10px', padding: '8px 16px', borderRadius: '4px', border: '1px solid rgba(52,211,153,0.3)', background: 'rgba(52,211,153,0.1)', color: '#34d399', fontFamily: 'var(--font-space-mono)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', opacity: actionLoading ? 0.5 : 1 }}
+                        style={{ fontSize: '10px', padding: '8px 16px', borderRadius: '4px', border: '1px solid #6ee7b7', background: '#ecfdf5', color: '#065f46', fontFamily: 'var(--font-space-mono)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', opacity: actionLoading ? 0.5 : 1 }}
                       >
                         {actionLoading ? '...' : '✓ Concluir Pedido'}
                       </button>
                       <button
                         disabled={actionLoading}
                         onClick={() => setShowCancelModal(true)}
-                        style={{ fontSize: '10px', padding: '8px 16px', borderRadius: '4px', border: '1px solid rgba(248,113,113,0.3)', background: 'rgba(248,113,113,0.1)', color: '#f87171', fontFamily: 'var(--font-space-mono)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', opacity: actionLoading ? 0.5 : 1 }}
+                        style={{ fontSize: '10px', padding: '8px 16px', borderRadius: '4px', border: '1px solid #fca5a5', background: '#fff1f1', color: '#991b1b', fontFamily: 'var(--font-space-mono)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', opacity: actionLoading ? 0.5 : 1 }}
                       >
                         ✕ Cancelar
                       </button>
                     </div>
                   )}
-                  {actionError && <p style={{ fontSize: '12px', color: '#f87171', marginTop: '10px', fontFamily: 'var(--font-space-mono)' }}>⚠ {actionError}</p>}
+                  {actionError && <p style={{ fontSize: '12px', color: '#991b1b', marginTop: '10px', fontFamily: 'var(--font-space-mono)' }}>⚠ {actionError}</p>}
                 </div>
 
                 {/* Cancel motivo */}
                 {showCancelModal && (
-                  <div style={{ padding: '16px 24px', background: 'rgba(239,68,68,0.05)', borderBottom: '1px solid rgba(239,68,68,0.15)' }}>
-                    <p style={{ fontSize: '11px', color: '#f87171', fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '10px' }}>Motivo do cancelamento (opcional)</p>
+                  <div style={{ padding: '16px 24px', background: '#fff8f8', borderBottom: '1px solid #fca5a5' }}>
+                    <p style={{ fontSize: '11px', color: '#991b1b', fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '10px' }}>Motivo do cancelamento (opcional)</p>
                     <input
                       value={motivoCancel}
                       onChange={e => setMotivoCancel(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && handleCancelar()}
                       placeholder="ex: cliente não estava em casa"
-                      style={{ width: '100%', background: 'var(--bg-surface-2)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '4px', padding: '8px 12px', fontSize: '12px', color: 'var(--text-primary)', outline: 'none', fontFamily: 'var(--font-space-mono)', boxSizing: 'border-box' }}
+                      style={{ width: '100%', background: 'var(--bg-surface)', border: '1px solid #fca5a5', borderRadius: '4px', padding: '8px 12px', fontSize: '12px', color: 'var(--text-primary)', outline: 'none', fontFamily: 'var(--font-space-mono)', boxSizing: 'border-box' }}
                     />
                     <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                      <button disabled={actionLoading} onClick={handleCancelar} style={{ flex: 1, fontSize: '10px', padding: '8px', borderRadius: '4px', border: '1px solid rgba(248,113,113,0.3)', background: 'rgba(248,113,113,0.15)', color: '#f87171', fontFamily: 'var(--font-space-mono)', fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', opacity: actionLoading ? 0.5 : 1 }}>
+                      <button disabled={actionLoading} onClick={handleCancelar} style={{ flex: 1, fontSize: '10px', padding: '8px', borderRadius: '4px', border: '1px solid #fca5a5', background: '#fff1f1', color: '#991b1b', fontFamily: 'var(--font-space-mono)', fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', opacity: actionLoading ? 0.5 : 1 }}>
                         {actionLoading ? '...' : 'Confirmar Cancelamento'}
                       </button>
                       <button onClick={() => { setShowCancelModal(false); setMotivoCancel(''); }} style={{ padding: '8px 14px', borderRadius: '4px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '10px', fontFamily: 'var(--font-space-mono)' }}>VOLTAR</button>
@@ -367,8 +367,8 @@ export default function PedidosPage() {
                     </div>
                   )}
                   {detail.motivo_cancelamento && (
-                    <div style={{ padding: '10px 12px', background: 'rgba(239,68,68,0.07)', borderRadius: '4px', border: '1px solid rgba(239,68,68,0.15)' }}>
-                      <p style={{ fontSize: '10px', color: '#f87171', fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '4px' }}>Motivo cancelamento</p>
+                    <div style={{ padding: '10px 12px', background: '#fff1f1', borderRadius: '4px', border: '1px solid #fca5a5' }}>
+                      <p style={{ fontSize: '10px', color: '#991b1b', fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '4px' }}>Motivo cancelamento</p>
                       <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{detail.motivo_cancelamento}</p>
                     </div>
                   )}

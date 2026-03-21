@@ -13,11 +13,11 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  atribuido: '#fbbf24',
-  saiu_para_entrega: '#60a5fa',
-  entregue: '#34d399',
-  cancelado: '#f87171',
-  novo: '#555',
+  atribuido: '#c27803',
+  saiu_para_entrega: '#2557e7',
+  entregue: '#047857',
+  cancelado: '#c81e1e',
+  novo: '#94a3b8',
 };
 
 const STATUS_ORDER = ['atribuido', 'saiu_para_entrega', 'entregue', 'cancelado', 'novo'];
@@ -137,22 +137,22 @@ export default async function DashboardPage() {
           <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '10px', fontFamily: 'var(--font-space-mono)' }}>pedidos recebidos</p>
         </div>
 
-        <div className="kpi-card" style={{ borderTop: '2px solid #34d399' }}>
+        <div className="kpi-card" style={{ borderTop: '2px solid #047857' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <p style={{ fontSize: '10px', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--text-secondary)', fontFamily: 'var(--font-space-mono)' }}>Entregues Hoje</p>
-            <CheckCircle2 size={13} style={{ color: '#34d399', opacity: 0.7 }} strokeWidth={1.5} />
+            <CheckCircle2 size={13} style={{ color: '#047857', opacity: 0.7 }} strokeWidth={1.5} />
           </div>
-          <p style={{ fontSize: '64px', fontWeight: 900, lineHeight: 1, fontFamily: 'var(--font-barlow)', color: '#34d399' }}>
+          <p style={{ fontSize: '64px', fontWeight: 900, lineHeight: 1, fontFamily: 'var(--font-barlow)', color: '#047857' }}>
             {summary.hoje.entregues}
           </p>
           {taxaConclusao !== null ? (
             <div style={{ marginTop: '10px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)' }}>taxa de conclusão</span>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#34d399', fontFamily: 'var(--font-space-mono)' }}>{taxaConclusao}%</span>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#047857', fontFamily: 'var(--font-space-mono)' }}>{taxaConclusao}%</span>
               </div>
               <div style={{ height: '4px', background: 'var(--bg-surface-3)', borderRadius: '2px', overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${taxaConclusao}%`, background: '#34d399', borderRadius: '2px', transition: 'width 0.6s ease' }} />
+                <div style={{ height: '100%', width: `${taxaConclusao}%`, background: '#047857', borderRadius: '2px', transition: 'width 0.6s ease' }} />
               </div>
             </div>
           ) : (
@@ -197,12 +197,12 @@ export default async function DashboardPage() {
           <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px', fontFamily: 'var(--font-space-mono)' }}>média atribuição → entregue</p>
         </div>
 
-        <div className={`kpi-card${metrics.pedidosAtrasados > 0 ? ' kpi-card-accent' : ''}`} style={{ borderTop: metrics.pedidosAtrasados > 0 ? '2px solid #f87171' : '2px solid var(--border)', padding: '20px 24px' }}>
+        <div className={`kpi-card${metrics.pedidosAtrasados > 0 ? ' kpi-card-accent' : ''}`} style={{ borderTop: metrics.pedidosAtrasados > 0 ? '2px solid #c81e1e' : '2px solid var(--border)', padding: '20px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-            <AlertTriangle size={13} style={{ color: metrics.pedidosAtrasados > 0 ? '#f87171' : 'var(--text-muted)', opacity: 0.8 }} strokeWidth={1.5} />
+            <AlertTriangle size={13} style={{ color: metrics.pedidosAtrasados > 0 ? '#c81e1e' : 'var(--text-muted)', opacity: 0.8 }} strokeWidth={1.5} />
             <p style={{ fontSize: '10px', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--text-secondary)', fontFamily: 'var(--font-space-mono)' }}>Atrasados</p>
           </div>
-          <p style={{ fontSize: '40px', fontWeight: 900, lineHeight: 1, fontFamily: 'var(--font-barlow)', color: metrics.pedidosAtrasados > 0 ? '#f87171' : 'var(--text-primary)' }}>
+          <p style={{ fontSize: '40px', fontWeight: 900, lineHeight: 1, fontFamily: 'var(--font-barlow)', color: metrics.pedidosAtrasados > 0 ? '#c81e1e' : 'var(--text-primary)' }}>
             {metrics.pedidosAtrasados}
           </p>
           <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px', fontFamily: 'var(--font-space-mono)' }}>em aberto há mais de 60min</p>
@@ -333,7 +333,7 @@ export default async function DashboardPage() {
                     <td style={{ padding: '12px 18px', fontSize: '13px', fontFamily: 'var(--font-space-mono)', color: e.emAberto > 0 ? 'var(--accent)' : 'var(--text-muted)', fontWeight: e.emAberto > 0 ? 700 : 400 }}>
                       {e.emAberto}
                     </td>
-                    <td style={{ padding: '12px 18px', fontSize: '13px', fontFamily: 'var(--font-space-mono)', color: '#34d399', fontWeight: 700 }}>
+                    <td style={{ padding: '12px 18px', fontSize: '13px', fontFamily: 'var(--font-space-mono)', color: '#047857', fontWeight: 700 }}>
                       {e.entreguesHoje}
                     </td>
                     <td style={{ padding: '12px 18px', fontSize: '13px', fontFamily: 'var(--font-space-mono)', color: 'var(--text-secondary)' }}>

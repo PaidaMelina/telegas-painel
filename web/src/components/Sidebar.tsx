@@ -15,7 +15,7 @@ export default function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
-        <Flame size={20} style={{ color: 'var(--accent)', flexShrink: 0 }} strokeWidth={1.5} />
+        <Flame size={20} style={{ color: '#88aaff', flexShrink: 0 }} strokeWidth={1.5} />
         <span className="sidebar-brand">TeleGás</span>
       </div>
       <nav className="sidebar-nav">
@@ -27,7 +27,7 @@ export default function Sidebar() {
         ))}
       </nav>
       <div className="sidebar-footer">
-        <span className="live-dot" />
+        <span className="sidebar-live-dot" />
         <span className="sidebar-live-label">Ao Vivo</span>
       </div>
     </aside>

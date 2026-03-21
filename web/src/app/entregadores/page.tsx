@@ -66,7 +66,7 @@ export default function EntregadoresPage() {
               style={{
                 fontSize: '10px', padding: '6px 14px', borderRadius: '4px',
                 background: filter === f ? 'var(--accent)' : 'var(--bg-surface)',
-                color: filter === f ? 'var(--bg-base)' : 'var(--text-secondary)',
+                color: filter === f ? '#ffffff' : 'var(--text-secondary)',
                 border: '1px solid', borderColor: filter === f ? 'var(--accent)' : 'var(--border)',
                 fontFamily: 'var(--font-space-mono)', fontWeight: 700, textTransform: 'uppercase',
                 letterSpacing: '0.05em', cursor: 'pointer', transition: 'all 0.15s ease',
@@ -89,12 +89,12 @@ export default function EntregadoresPage() {
           <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px', fontFamily: 'var(--font-space-mono)' }}>de {entregadores.length} cadastrados</p>
         </div>
 
-        <div className="kpi-card" style={{ borderTop: '2px solid #34d399', padding: '20px 24px' }}>
+        <div className="kpi-card" style={{ borderTop: '2px solid #047857', padding: '20px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-            <CheckCircle2 size={13} style={{ color: '#34d399', opacity: 0.7 }} strokeWidth={1.5} />
+            <CheckCircle2 size={13} style={{ color: '#047857', opacity: 0.7 }} strokeWidth={1.5} />
             <p style={{ fontSize: '10px', letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--text-secondary)', fontFamily: 'var(--font-space-mono)' }}>Entregues Hoje</p>
           </div>
-          <p style={{ fontSize: '40px', fontWeight: 900, lineHeight: 1, fontFamily: 'var(--font-barlow)', color: '#34d399' }}>{totalEntreguesHoje}</p>
+          <p style={{ fontSize: '40px', fontWeight: 900, lineHeight: 1, fontFamily: 'var(--font-barlow)', color: '#047857' }}>{totalEntreguesHoje}</p>
           <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px', fontFamily: 'var(--font-space-mono)' }}>entregas concluídas</p>
         </div>
 
@@ -126,7 +126,7 @@ export default function EntregadoresPage() {
                 key={e.id}
                 className="kpi-card"
                 style={{
-                  borderTop: e.pedidosAbertos > 0 ? '2px solid var(--accent)' : e.ativo ? '2px solid #34d399' : '2px solid var(--border)',
+                  borderTop: e.pedidosAbertos > 0 ? '2px solid var(--accent)' : e.ativo ? '2px solid #047857' : '2px solid var(--border)',
                   padding: '20px',
                 }}
               >
@@ -140,9 +140,9 @@ export default function EntregadoresPage() {
                     display: 'inline-flex', alignItems: 'center', gap: '4px',
                     padding: '3px 8px', borderRadius: '3px', fontSize: '9px', fontWeight: 700,
                     letterSpacing: '0.07em', textTransform: 'uppercase', fontFamily: 'var(--font-space-mono)',
-                    background: e.ativo ? 'rgba(16,185,129,0.10)' : 'rgba(102,102,102,0.10)',
-                    color: e.ativo ? '#34d399' : 'var(--text-secondary)',
-                    border: `1px solid ${e.ativo ? 'rgba(16,185,129,0.22)' : 'rgba(102,102,102,0.22)'}`,
+                    background: e.ativo ? '#d1fae5' : '#f1f5f9',
+                    color: e.ativo ? '#065f46' : '#4a5568',
+                    border: `1px solid ${e.ativo ? '#6ee7b7' : '#cbd5e1'}`,
                     flexShrink: 0,
                   }}>
                     <svg width="4" height="4" viewBox="0 0 5 5" fill="currentColor"><circle cx="2.5" cy="2.5" r="2.5" /></svg>
@@ -154,7 +154,7 @@ export default function EntregadoresPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '16px' }}>
                   <div>
                     <p style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px' }}>Entregues</p>
-                    <p style={{ fontSize: '26px', fontWeight: 900, color: '#34d399', fontFamily: 'var(--font-barlow)', lineHeight: 1 }}>{e.entreguesHoje}</p>
+                    <p style={{ fontSize: '26px', fontWeight: 900, color: '#047857', fontFamily: 'var(--font-barlow)', lineHeight: 1 }}>{e.entreguesHoje}</p>
                   </div>
                   <div>
                     <p style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px' }}>Em Rota</p>
