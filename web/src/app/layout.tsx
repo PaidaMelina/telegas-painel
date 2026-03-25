@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Sora, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
+import PainelEntregas from "@/components/PainelEntregas";
 
 const sora = Sora({
   variable: "--font-barlow",
@@ -35,6 +36,7 @@ export default function RootLayout({
         <div style={{ flex: 1, minWidth: 0, overflowX: 'hidden' }}>
           {children}
         </div>
+        <PainelEntregas />
       </body>
     </html>
   );

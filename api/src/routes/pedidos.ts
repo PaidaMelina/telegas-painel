@@ -47,6 +47,24 @@ export async function pedidosRoutes(server: FastifyInstance) {
     }
   });
 
+  // GET /ativos — pedidos em andamento (atribuido + saiu_para_entrega)
+  server.get('/ativos', async (_request, reply) => {
+    try {
+      const { rows } = await pool.query(`
+        SELECT p.*, e.nome as entregador_nome, c.nome as nome_cliente
+        FROM public.telegas_pedidos p
+        LEFT JOIN public.telegas_entregadores e ON e.id = p.entregador_id
+        LEFT JOIN public.telegas_clientes c ON c.telefone = p.telefone_cliente
+        WHERE p.status IN ('atribuido', 'saiu_para_entrega')
+        ORDER BY p.created_at ASC
+      `);
+      return rows;
+    } catch (err) {
+      server.log.error(err);
+      return reply.code(500).send({ error: 'Erro ao buscar pedidos ativos' });
+    }
+  });
+
   server.get('/:id', async (request, reply) => {
     const { id } = request.params as any;
     try {
