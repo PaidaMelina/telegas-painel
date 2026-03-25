@@ -2,10 +2,14 @@ import { FastifyInstance } from 'fastify';
 import { pool } from '../db';
 
 export async function entregadoresRoutes(server: FastifyInstance) {
-  // Ensure em_folga column exists
+  // Ensure columns exist
   await pool.query(`
     ALTER TABLE public.telegas_entregadores
     ADD COLUMN IF NOT EXISTS em_folga BOOLEAN NOT NULL DEFAULT false
+  `).catch(() => {});
+  await pool.query(`
+    ALTER TABLE public.telegas_entregadores
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()
   `).catch(() => {});
 
   // GET /api/entregadores

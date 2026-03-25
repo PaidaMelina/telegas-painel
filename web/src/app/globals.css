@@ -70,6 +70,7 @@ body {
   background: radial-gradient(ellipse at top left, var(--accent-dim) 0%, transparent 60%);
   opacity: 0;
   transition: opacity 0.4s ease;
+  pointer-events: none;
 }
 
 .kpi-card:hover::before {
