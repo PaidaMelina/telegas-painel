@@ -80,4 +80,52 @@ export const api = {
     if (!res.ok) throw new Error('Failed to fetch entregadores');
     return res.json();
   },
+
+  criarEntregador: async (data: { nome: string; telefone: string }) => {
+    const res = await fetch(`${API_URL}/entregadores`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as any).error || 'Erro ao criar entregador');
+    }
+    return res.json();
+  },
+
+  atualizarEntregador: async (id: number, data: { nome: string; telefone: string; ativo: boolean }) => {
+    const res = await fetch(`${API_URL}/entregadores/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as any).error || 'Erro ao atualizar entregador');
+    }
+    return res.json();
+  },
+
+  toggleFolga: async (id: number, emFolga: boolean) => {
+    const res = await fetch(`${API_URL}/entregadores/${id}/folga`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emFolga }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as any).error || 'Erro ao atualizar folga');
+    }
+    return res.json();
+  },
+
+  excluirEntregador: async (id: number) => {
+    const res = await fetch(`${API_URL}/entregadores/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as any).error || 'Erro ao excluir entregador');
+    }
+    return res.json();
+  },
 };
