@@ -7,7 +7,7 @@ export async function dashboardRoutes(server: FastifyInstance) {
       const [totalRes, entreguesRes, abertosRes] = await Promise.all([
         pool.query(`SELECT COUNT(*) FROM public.telegas_pedidos WHERE DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE`),
         pool.query(`SELECT COUNT(*) FROM public.telegas_pedidos WHERE status = 'entregue' AND DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE`),
-        pool.query(`SELECT COUNT(*) FROM public.telegas_pedidos WHERE status NOT IN ('entregue','cancelado')`),
+        pool.query(`SELECT COUNT(*) FROM public.telegas_pedidos WHERE status NOT IN ('entregue','cancelado') AND DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE`),
       ]);
       return {
         hoje: {
@@ -42,10 +42,12 @@ export async function dashboardRoutes(server: FastifyInstance) {
         `),
         pool.query(`
           SELECT COUNT(*) as count FROM public.telegas_pedidos
-          WHERE
-            (status = 'atribuido' AND atribuido_em IS NOT NULL AND atribuido_em < NOW() - INTERVAL '15 minutes')
-            OR
-            (status = 'saiu_para_entrega' AND saiu_entrega_em IS NOT NULL AND saiu_entrega_em < NOW() - INTERVAL '45 minutes')
+          WHERE DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE
+            AND (
+              (status = 'atribuido' AND atribuido_em IS NOT NULL AND atribuido_em < NOW() - INTERVAL '15 minutes')
+              OR
+              (status = 'saiu_para_entrega' AND saiu_entrega_em IS NOT NULL AND saiu_entrega_em < NOW() - INTERVAL '45 minutes')
+            )
         `),
       ]);
       return {
@@ -104,7 +106,7 @@ export async function dashboardRoutes(server: FastifyInstance) {
       const { rows } = await pool.query(`
         SELECT
           COALESCE(e.nome, 'Não atribuído') as nome,
-          COUNT(p.id) FILTER (WHERE p.status IN ('atribuido','saiu_para_entrega')) as em_aberto,
+          COUNT(p.id) FILTER (WHERE p.status IN ('atribuido','saiu_para_entrega') AND DATE(p.created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE) as em_aberto,
           COUNT(p.id) FILTER (WHERE p.status = 'entregue'
             AND DATE(p.created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE) as entregues_hoje,
           COALESCE(
