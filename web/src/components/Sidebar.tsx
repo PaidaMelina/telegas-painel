@@ -2,12 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Flame, LayoutDashboard, Package, Users } from 'lucide-react';
+import { Flame, LayoutDashboard, Package, Users, Contact, HeartPulse } from 'lucide-react';
 
 const nav = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/pedidos', label: 'Pedidos', icon: Package },
   { href: '/entregadores', label: 'Entregadores', icon: Users },
+  { href: '/clientes', label: 'Clientes', icon: Contact },
+  { href: '/retencao', label: 'Retenção', icon: HeartPulse },
 ];
 
 export default function Sidebar() {

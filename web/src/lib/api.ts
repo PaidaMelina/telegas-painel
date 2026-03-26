@@ -120,6 +120,32 @@ export const api = {
     return res.json();
   },
 
+  getRetencao: async () => {
+    const res = await fetch(`${API_URL}/clientes/retencao`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch retencao');
+    return res.json();
+  },
+
+  getClientes: async (params?: Record<string, string>) => {
+    const query = params ? new URLSearchParams(params).toString() : '';
+    const res = await fetch(`${API_URL}/clientes${query ? `?${query}` : ''}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch clientes');
+    return res.json();
+  },
+
+  atualizarCliente: async (id: number, data: { nome?: string; endereco?: string; bairro?: string; etiquetas?: string[] }) => {
+    const res = await fetch(`${API_URL}/clientes/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as any).error || 'Erro ao atualizar cliente');
+    }
+    return res.json();
+  },
+
   excluirEntregador: async (id: number) => {
     const res = await fetch(`${API_URL}/entregadores/${id}`, { method: 'DELETE' });
     if (!res.ok) {
