@@ -120,12 +120,15 @@ export const api = {
     return res.json();
   },
 
+<<<<<<< HEAD
   getRetencao: async () => {
     const res = await fetch(`${API_URL}/clientes/retencao`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch retencao');
     return res.json();
   },
 
+=======
+>>>>>>> 0b4fe6696680acf100a945913161681f0afc5672
   getClientes: async (params?: Record<string, string>) => {
     const query = params ? new URLSearchParams(params).toString() : '';
     const res = await fetch(`${API_URL}/clientes${query ? `?${query}` : ''}`, { cache: 'no-store' });

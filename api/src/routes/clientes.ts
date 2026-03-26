@@ -64,6 +64,7 @@ export async function clientesRoutes(server: FastifyInstance) {
     }
   });
 
+<<<<<<< HEAD
   // GET /api/clientes/retencao — ciclo de compra + fidelidade
   server.get('/retencao', async (_request, reply) => {
     try {
@@ -156,6 +157,8 @@ export async function clientesRoutes(server: FastifyInstance) {
     }
   });
 
+=======
+>>>>>>> 0b4fe6696680acf100a945913161681f0afc5672
   // PATCH /api/clientes/:id
   server.patch<{
     Params: { id: string };
