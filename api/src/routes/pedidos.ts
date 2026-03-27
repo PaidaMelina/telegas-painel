@@ -25,7 +25,15 @@ export async function pedidosRoutes(server: FastifyInstance) {
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const dataQuery = `SELECT * FROM public.telegas_pedidos ${where} ORDER BY ${sortCol} ${sortDir} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    const dataQuery = `
+      SELECT p.*, e.nome as entregador_nome,
+        CASE WHEN p.atribuido_em IS NOT NULL AND p.entregue_em IS NOT NULL
+          THEN ROUND(EXTRACT(EPOCH FROM (p.entregue_em - p.atribuido_em)) / 60)
+          ELSE NULL
+        END as tempo_entrega_min
+      FROM public.telegas_pedidos p
+      LEFT JOIN public.telegas_entregadores e ON e.id = p.entregador_id
+      ${where} ORDER BY p.${sortCol} ${sortDir} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     const countQuery = `SELECT COUNT(*) FROM public.telegas_pedidos ${where}`;
     const countParams = [...params];
     params.push(limit, offset);

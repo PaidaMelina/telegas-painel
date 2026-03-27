@@ -37,6 +37,8 @@ interface Pedido {
   bairro: string;
   status: string;
   created_at: string;
+  entregador_nome: string | null;
+  tempo_entrega_min: number | null;
 }
 
 export default async function DashboardPage() {
@@ -367,7 +369,7 @@ export default async function DashboardPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--bg-surface-2)', borderBottom: '1px solid var(--border)' }}>
-                {['#', 'Produtos', 'Endereço', 'Total', 'Status'].map((h) => (
+                {['#', 'Produtos', 'Endereço', 'Entregador', 'Tempo', 'Total', 'Status'].map((h) => (
                   <th key={h} style={{ textAlign: 'left', padding: '10px 18px', fontSize: '10px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)' }}>
                     {h}
                   </th>
@@ -377,7 +379,7 @@ export default async function DashboardPage() {
             <tbody>
               {pedidos.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)', fontSize: '13px', fontFamily: 'var(--font-space-mono)' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)', fontSize: '13px', fontFamily: 'var(--font-space-mono)' }}>
                     Nenhum pedido encontrado
                   </td>
                 </tr>
@@ -389,13 +391,19 @@ export default async function DashboardPage() {
                   return (
                     <tr key={p.id} className="orders-row" style={{ background: 'var(--bg-surface)' }}>
                       <td style={{ padding: '13px 18px', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-space-mono)', color: 'var(--accent)', borderLeft: `3px solid ${STATUS_COLORS[p.status] ?? '#333'}` }}>#{p.id}</td>
-                      <td style={{ padding: '13px 18px', fontSize: '13px', color: 'var(--text-primary)', maxWidth: '240px' }}>
+                      <td style={{ padding: '13px 18px', fontSize: '13px', color: 'var(--text-primary)', maxWidth: '200px' }}>
                         <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{produtosStr}</span>
                       </td>
-                      <td style={{ padding: '13px 18px', fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '200px' }}>
+                      <td style={{ padding: '13px 18px', fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '180px' }}>
                         <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {p.endereco}{p.bairro ? ` — ${p.bairro}` : ''}
                         </span>
+                      </td>
+                      <td style={{ padding: '13px 18px', fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                        {p.entregador_nome ?? <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '13px 18px', fontSize: '12px', fontFamily: 'var(--font-space-mono)', color: p.tempo_entrega_min != null ? 'var(--text-secondary)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                        {p.tempo_entrega_min != null ? `${p.tempo_entrega_min}min` : '—'}
                       </td>
                       <td style={{ padding: '13px 18px', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-space-mono)', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                         R$ {parseFloat(p.total).toFixed(2)}
