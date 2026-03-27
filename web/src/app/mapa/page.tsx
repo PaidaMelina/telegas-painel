@@ -31,16 +31,21 @@ function isOnMap(bairro: string): boolean {
 }
 
 export default function MapaPage() {
-  const [dados, setDados]     = useState<BairroDado[]>([]);
-  const [periodo, setPeriodo] = useState('hoje');
-  const [loading, setLoading] = useState(true);
-  const [mapKey, setMapKey]   = useState(0); // force remount on period change
+  const [dados, setDados]           = useState<BairroDado[]>([]);
+  const [coordenadas, setCoordenadas] = useState<{lat: number, lng: number, count: number}[]>([]);
+  const [periodo, setPeriodo]       = useState('hoje');
+  const [loading, setLoading]       = useState(true);
+  const [mapKey, setMapKey]         = useState(0); // force remount on period change
 
   async function load(p: string) {
     setLoading(true);
     try {
-      const d = await api.getDashboardByBairro(p);
+      const [d, c] = await Promise.all([
+        api.getDashboardByBairro(p),
+        api.getDashboardHeatmapAddresses(p).catch(() => [])
+      ]);
       setDados(d);
+      setCoordenadas(c);
       setMapKey(k => k + 1);
     } finally {
       setLoading(false);
@@ -173,7 +178,7 @@ export default function MapaPage() {
               </div>
             </div>
           )}
-          <MapaCalor key={mapKey} dados={dados} />
+          <MapaCalor key={mapKey} dados={dados} coordenadas={coordenadas} />
         </div>
 
         {/* Sidebar ranking */}

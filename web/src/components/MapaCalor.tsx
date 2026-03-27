@@ -10,6 +10,7 @@ interface BairroDado {
 
 interface Props {
   dados: BairroDado[];
+  coordenadas?: { lat: number; lng: number; count: number }[];
 }
 
 /* Coordenadas dos bairros de Jaguarão - RS */
@@ -53,7 +54,7 @@ function getColor(ratio: number): string {
   return '#ef4444';
 }
 
-export default function MapaCalor({ dados }: Props) {
+export default function MapaCalor({ dados, coordenadas }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
 
@@ -64,6 +65,14 @@ export default function MapaCalor({ dados }: Props) {
     (async () => {
       L = (await import('leaflet')).default;
       await import('leaflet/dist/leaflet.css');
+      
+      // Setup leaflet.heat
+      (window as any).L = L;
+      try {
+        await import('leaflet.heat');
+      } catch (e) {
+        console.warn('leaflet.heat failed to load', e);
+      }
 
       const map = L.map(containerRef.current, {
         center: [-32.5671, -53.376],
@@ -80,38 +89,59 @@ export default function MapaCalor({ dados }: Props) {
         maxZoom: 19,
       }).addTo(map);
 
-      const maxCount = Math.max(...dados.map(d => d.count), 1);
-
-      dados.forEach((d) => {
-        const coords = getCoords(d.bairro);
-        if (!coords) return;
-
-        const ratio = d.count / maxCount;
-        const radius = 30 + ratio * 70; // 30–100px
-        const color = getColor(ratio);
-
-        const circle = L.circleMarker(coords, {
-          radius,
-          fillColor: color,
-          fillOpacity: 0.22 + ratio * 0.28,
-          color: color,
-          weight: 1.5,
-          opacity: 0.7,
+      // Render Geocoded Points via Heatmap if available
+      if (coordenadas && coordenadas.length > 0 && typeof (L as any).heatLayer === 'function') {
+        const maxPtsCount = Math.max(...coordenadas.map((c: { lat: number; lng: number; count: number }) => c.count), 1);
+        const heatData = coordenadas.map((c: { lat: number; lng: number; count: number }) => [c.lat, c.lng, Math.min(c.count / maxPtsCount * 2, 1)]);
+        
+        (L as any).heatLayer(heatData, {
+          radius: 20,
+          blur: 15,
+          maxZoom: 16,
+          gradient: {
+            0.2: '#2557e7',
+            0.4: '#06b6d4',
+            0.6: '#f59e0b',
+            0.8: '#ef4444',
+            1.0: '#ff0000'
+          }
         }).addTo(map);
+      } 
+      // Fallback to or render legacy Bairro Circles as well
+      else {
+        const maxCount = Math.max(...dados.map(d => d.count), 1);
 
-        circle.bindTooltip(`
-          <div style="font-family:monospace;font-size:12px;line-height:1.6;min-width:130px">
-            <strong style="font-size:13px;display:block;margin-bottom:4px">${d.bairro}</strong>
-            <span style="color:#9aa5b4">Pedidos:</span> <strong style="color:${color}">${d.count}</strong><br/>
-            <span style="color:#9aa5b4">Receita:</span> R$ ${d.total.toFixed(2)}
-          </div>
-        `, {
-          className: 'mapa-tooltip',
-          sticky: true,
-          direction: 'top',
-          offset: [0, -radius],
+        dados.forEach((d) => {
+          const coords = getCoords(d.bairro);
+          if (!coords) return;
+
+          const ratio = d.count / maxCount;
+          const radius = 30 + ratio * 70; // 30–100px
+          const color = getColor(ratio);
+
+          const circle = L.circleMarker(coords, {
+            radius,
+            fillColor: color,
+            fillOpacity: 0.22 + ratio * 0.28,
+            color: color,
+            weight: 1.5,
+            opacity: 0.7,
+          }).addTo(map);
+
+          circle.bindTooltip(`
+            <div style="font-family:monospace;font-size:12px;line-height:1.6;min-width:130px">
+              <strong style="font-size:13px;display:block;margin-bottom:4px">${d.bairro}</strong>
+              <span style="color:#9aa5b4">Pedidos:</span> <strong style="color:${color}">${d.count}</strong><br/>
+              <span style="color:#9aa5b4">Receita:</span> R$ ${d.total.toFixed(2)}
+            </div>
+          `, {
+            className: 'mapa-tooltip',
+            sticky: true,
+            direction: 'top',
+            offset: [0, -radius],
+          });
         });
-      });
+      }
     })();
 
     return () => {
@@ -120,7 +150,7 @@ export default function MapaCalor({ dados }: Props) {
         mapRef.current = null;
       }
     };
-  }, [dados]);
+  }, [dados, coordenadas]);
 
   return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
 }

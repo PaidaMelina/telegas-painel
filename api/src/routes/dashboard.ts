@@ -183,4 +183,83 @@ export async function dashboardRoutes(server: FastifyInstance) {
       return reply.code(500).send({ error: 'Erro ao buscar por entregador' });
     }
   });
+
+  server.get('/heatmap-addresses', async (request, reply) => {
+    try {
+      const { periodo = 'mes' } = request.query as { periodo?: string };
+      let whereClause: string;
+      if (periodo === 'semana') {
+        whereClause = `created_at AT TIME ZONE 'America/Sao_Paulo' >= (NOW() AT TIME ZONE 'America/Sao_Paulo') - INTERVAL '7 days'`;
+      } else if (periodo === 'mes') {
+        whereClause = `created_at AT TIME ZONE 'America/Sao_Paulo' >= (NOW() AT TIME ZONE 'America/Sao_Paulo') - INTERVAL '30 days'`;
+      } else if (periodo === 'total') {
+        whereClause = '1=1';
+      } else {
+        whereClause = `DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE`;
+      }
+
+      // Step 1: Geocodificação reativa (Lazy Geocoding)
+      // Pega até 10 pedidos recentes sem latitude para tentar converter agora
+      const missingCoordsRes = await pool.query(`
+        SELECT id, endereco 
+        FROM public.telegas_pedidos 
+        WHERE latitude IS NULL 
+          AND endereco IS NOT NULL 
+          AND TRIM(endereco) != ''
+          AND ${whereClause}
+        ORDER BY created_at DESC 
+        LIMIT 10
+      `);
+
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyBY8YkjuUbLuODVYwlD8mNzO-72nMlJupY';
+
+      if (missingCoordsRes.rows.length > 0 && apiKey) {
+        for (const row of missingCoordsRes.rows) {
+          const q = encodeURIComponent(`${row.endereco}, Jaguarão, RS, Brasil`);
+          try {
+            const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${q}&key=${apiKey}`;
+            const req = await fetch(url);
+            const data = await req.json();
+            
+            if (data.status === 'OK' && data.results && data.results.length > 0) {
+              const location = data.results[0].geometry.location;
+              await pool.query(
+                `UPDATE public.telegas_pedidos SET latitude = $1, longitude = $2 WHERE id = $3`,
+                [location.lat, location.lng, row.id]
+              );
+            } else {
+              // Mark as invalid (using 0 bounds to avoid re-fetching, or just leave it)
+              // Just to prevent infinite loop for invalid addresses:
+              await pool.query(`UPDATE public.telegas_pedidos SET latitude = 0, longitude = 0 WHERE id = $1`, [row.id]);
+            }
+          } catch (e) {
+            server.log.error('Erro Geocoding Google: ' + e);
+          }
+        }
+      }
+
+      // Step 2: Buscar e retornar todos com coordenadas válidas
+      const { rows } = await pool.query(`
+        SELECT 
+          latitude, 
+          longitude,
+          COUNT(*) as count
+        FROM public.telegas_pedidos
+        WHERE latitude IS NOT NULL 
+          AND latitude != 0 
+          AND longitude != 0
+          AND ${whereClause}
+        GROUP BY latitude, longitude
+      `);
+
+      return rows.map((r: any) => ({
+        lat: parseFloat(r.latitude),
+        lng: parseFloat(r.longitude),
+        count: parseInt(r.count, 10),
+      }));
+    } catch (err) {
+      server.log.error(err);
+      return reply.code(500).send({ error: 'Erro ao buscar heatmap' });
+    }
+  });
 }

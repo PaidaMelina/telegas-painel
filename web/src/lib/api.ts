@@ -26,6 +26,13 @@ export const api = {
     return res.json();
   },
 
+  getDashboardHeatmapAddresses: async (periodo?: string) => {
+    const q = periodo ? `?periodo=${periodo}` : '';
+    const res = await fetch(`${API_URL}/dashboard/heatmap-addresses${q}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch address heatmap');
+    return res.json();
+  },
+
   getDashboardProdutosHoje: async () => {
     const res = await fetch(`${API_URL}/dashboard/produtos-hoje`, { next: { revalidate: 30 } });
     if (!res.ok) throw new Error('Failed to fetch produtos hoje');
