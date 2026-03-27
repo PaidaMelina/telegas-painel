@@ -12,20 +12,21 @@ interface Props {
   dados: BairroDado[];
 }
 
-/* Coordenadas aproximadas dos bairros de Jaguarão - RS */
+/* Coordenadas dos bairros de Jaguarão - RS */
 const COORDS: Record<string, [number, number]> = {
-  'centro':         [-32.5671, -53.3760],
-  'são marcos':     [-32.5590, -53.3790],
-  'jardim':         [-32.5720, -53.3830],
-  'parque':         [-32.5755, -53.3695],
-  'bairro novo':    [-32.5625, -53.3845],
-  'lacerdinha':     [-32.5700, -53.3660],
-  'são cristóvão':  [-32.5645, -53.3715],
-  'ponche verde':   [-32.5545, -53.3820],
-  'vila nova':      [-32.5680, -53.3880],
-  'progresso':      [-32.5610, -53.3700],
-  'aparecida':      [-32.5730, -53.3760],
-  'cohab':          [-32.5660, -53.3840],
+  'centro':                     [-32.5661, -53.3758],
+  'porto':                      [-32.5715, -53.3820],
+  'kennedy':                    [-32.5590, -53.3740],
+  'pindorama':                  [-32.5510, -53.3640],
+  'boa esperanca':              [-32.5560, -53.3850],
+  'vila militar':               [-32.5615, -53.3800],
+  'castelo branco':             [-32.5480, -53.3690],
+  'cohab':                      [-32.5480, -53.3690],
+  'nossa sra. da conceicao':    [-32.5630, -53.3680],
+  'nossa senhora da conceicao': [-32.5630, -53.3680],
+  'irineu guimaraes':           [-32.5530, -53.3780],
+  'sao jorge':                  [-32.5450, -53.3750],
+  'prado':                      [-32.5495, -53.3810],
 };
 
 function normalize(name: string): string {
