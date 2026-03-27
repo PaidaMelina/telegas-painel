@@ -19,8 +19,9 @@ export const api = {
     return res.json();
   },
 
-  getDashboardByBairro: async () => {
-    const res = await fetch(`${API_URL}/dashboard/by-bairro`, { next: { revalidate: 30 } });
+  getDashboardByBairro: async (periodo?: string) => {
+    const q = periodo ? `?periodo=${periodo}` : '';
+    const res = await fetch(`${API_URL}/dashboard/by-bairro${q}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch by bairro');
     return res.json();
   },

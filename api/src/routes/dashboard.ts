@@ -77,18 +77,29 @@ export async function dashboardRoutes(server: FastifyInstance) {
     }
   });
 
-  server.get('/by-bairro', async (_request, reply) => {
+  server.get('/by-bairro', async (request, reply) => {
     try {
+      const { periodo = 'hoje' } = request.query as { periodo?: string };
+      let whereClause: string;
+      if (periodo === 'semana') {
+        whereClause = `created_at AT TIME ZONE 'America/Sao_Paulo' >= (NOW() AT TIME ZONE 'America/Sao_Paulo') - INTERVAL '7 days'`;
+      } else if (periodo === 'mes') {
+        whereClause = `created_at AT TIME ZONE 'America/Sao_Paulo' >= (NOW() AT TIME ZONE 'America/Sao_Paulo') - INTERVAL '30 days'`;
+      } else if (periodo === 'total') {
+        whereClause = '1=1';
+      } else {
+        whereClause = `DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE`;
+      }
       const { rows } = await pool.query(`
         SELECT
           COALESCE(NULLIF(TRIM(bairro), ''), 'Não informado') as bairro,
           COUNT(*) as count,
           COALESCE(SUM(total::numeric), 0) as total
         FROM public.telegas_pedidos
-        WHERE DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE
+        WHERE ${whereClause}
         GROUP BY bairro
         ORDER BY count DESC
-        LIMIT 8
+        LIMIT 20
       `);
       return rows.map((r: any) => ({
         bairro: r.bairro,
