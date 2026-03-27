@@ -147,6 +147,41 @@ export const api = {
     return res.json();
   },
 
+  getRelatorioResumo: async (periodo: string, de?: string, ate?: string) => {
+    const q = new URLSearchParams({ periodo, ...(de ? { de } : {}), ...(ate ? { ate } : {}) }).toString();
+    const res = await fetch(`${API_URL}/relatorios/resumo?${q}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch resumo');
+    return res.json();
+  },
+
+  getRelatorioSerie: async (periodo: string, de?: string, ate?: string) => {
+    const q = new URLSearchParams({ periodo, ...(de ? { de } : {}), ...(ate ? { ate } : {}) }).toString();
+    const res = await fetch(`${API_URL}/relatorios/serie-temporal?${q}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch serie');
+    return res.json();
+  },
+
+  getRelatorioProdutos: async (periodo: string, de?: string, ate?: string) => {
+    const q = new URLSearchParams({ periodo, ...(de ? { de } : {}), ...(ate ? { ate } : {}) }).toString();
+    const res = await fetch(`${API_URL}/relatorios/top-produtos?${q}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch produtos');
+    return res.json();
+  },
+
+  getRelatorioEntregadores: async (periodo: string, de?: string, ate?: string) => {
+    const q = new URLSearchParams({ periodo, ...(de ? { de } : {}), ...(ate ? { ate } : {}) }).toString();
+    const res = await fetch(`${API_URL}/relatorios/top-entregadores?${q}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch entregadores relatorio');
+    return res.json();
+  },
+
+  getRelatorioBairros: async (periodo: string, de?: string, ate?: string) => {
+    const q = new URLSearchParams({ periodo, ...(de ? { de } : {}), ...(ate ? { ate } : {}) }).toString();
+    const res = await fetch(`${API_URL}/relatorios/top-bairros?${q}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch bairros relatorio');
+    return res.json();
+  },
+
   excluirEntregador: async (id: number) => {
     const res = await fetch(`${API_URL}/entregadores/${id}`, { method: 'DELETE' });
     if (!res.ok) {
