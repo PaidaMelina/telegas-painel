@@ -4,6 +4,7 @@ import { dashboardRoutes } from './dashboard';
 import { entregadoresRoutes } from './entregadores';
 import { clientesRoutes } from './clientes';
 import { relatoriosRoutes } from './relatorios';
+import { conversasRoutes } from './conversas';
 import { pool } from '../db';
 
 export async function setupRoutes(server: FastifyInstance) {
@@ -38,4 +39,5 @@ export async function setupRoutes(server: FastifyInstance) {
   server.register(entregadoresRoutes, { prefix: '/api/entregadores' });
   server.register(clientesRoutes, { prefix: '/api/clientes' });
   server.register(relatoriosRoutes, { prefix: '/api/relatorios' });
+  server.register(conversasRoutes, { prefix: '/api/conversas' });
 }

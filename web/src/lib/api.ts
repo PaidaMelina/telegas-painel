@@ -190,4 +190,16 @@ export const api = {
     }
     return res.json();
   },
+
+  getConversasAtivas: async () => {
+    const res = await fetch(`${API_URL}/conversas/ativas`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch conversas');
+    return res.json();
+  },
+
+  getConversaMensagens: async (sessionId: string) => {
+    const res = await fetch(`${API_URL}/conversas/${encodeURIComponent(sessionId)}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch mensagens');
+    return res.json();
+  },
 };

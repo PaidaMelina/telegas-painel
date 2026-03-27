@@ -1,7 +1,8 @@
 import React from 'react';
 import { api } from '@/lib/api';
-import { Package, CheckCircle2, Truck, AlertTriangle, ArrowRight, TrendingUp, Clock, Users, Timer } from 'lucide-react';
+import { Package, CheckCircle2, Truck, AlertTriangle, ArrowRight, TrendingUp, Clock, Users } from 'lucide-react';
 import Link from 'next/link';
+import ConversasPanel from '@/components/ConversasPanel';
 
 export const revalidate = 30;
 
@@ -110,11 +111,6 @@ export default async function DashboardPage() {
     (a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)
   );
   const maxEntregadorAberto = Math.max(...byEntregador.map(e => e.emAberto), 1);
-
-  const ativos = pedidos
-    .filter((p) => ACTIVE_STATUSES.has(p.status))
-    .map((p) => ({ ...p, mins: elapsedMin(p.created_at) }))
-    .sort((a, b) => b.mins - a.mins);
 
   return (
     <div style={{ display: 'flex', alignItems: 'stretch', width: '100%', minHeight: '100vh' }}>
@@ -468,14 +464,13 @@ export default async function DashboardPage() {
         </footer>
       </main>
 
-      {/* ── Right: Em Andamento Sticky Panel ── */}
+      {/* ── Right: Conversas ao Vivo ── */}
       <aside style={{
         width: '300px',
         flexShrink: 0,
         position: 'sticky',
         top: 0,
         height: '100vh',
-        overflowY: 'auto',
         borderLeft: '1px solid var(--border)',
         background: 'var(--bg-surface)',
         display: 'flex',
@@ -486,108 +481,17 @@ export default async function DashboardPage() {
           padding: '24px 20px 16px',
           borderBottom: '1px solid var(--border)',
           background: 'var(--bg-surface-2)',
-          position: 'sticky',
-          top: 0,
-          zIndex: 1,
+          flexShrink: 0,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <p style={{ fontSize: '9px', letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginBottom: '4px' }}>
-                Monitoramento
-              </p>
-              <h2 style={{ fontSize: '14px', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-primary)', fontFamily: 'var(--font-barlow)', lineHeight: 1 }}>
-                Em Andamento
-              </h2>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: ativos.length > 0 ? 'rgba(37,87,231,0.08)' : 'var(--bg-surface-3)', borderRadius: '20px', padding: '4px 10px' }}>
-              <Timer size={10} style={{ color: ativos.length > 0 ? 'var(--accent)' : 'var(--text-muted)' }} />
-              <span style={{ fontSize: '11px', fontWeight: 700, fontFamily: 'var(--font-space-mono)', color: ativos.length > 0 ? 'var(--accent)' : 'var(--text-muted)' }}>
-                {ativos.length}
-              </span>
-            </div>
-          </div>
+          <p style={{ fontSize: '9px', letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginBottom: '4px' }}>
+            Ao Vivo · 30 min
+          </p>
+          <h2 style={{ fontSize: '14px', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-primary)', fontFamily: 'var(--font-barlow)', lineHeight: 1 }}>
+            Conversas
+          </h2>
         </div>
 
-        {/* Order Cards */}
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-          {ativos.length === 0 ? (
-            <div style={{ padding: '48px 20px', textAlign: 'center' }}>
-              <CheckCircle2 size={32} style={{ color: '#047857', opacity: 0.3, margin: '0 auto 12px' }} />
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', lineHeight: 1.6 }}>
-                Nenhum pedido<br />em andamento
-              </p>
-            </div>
-          ) : (
-            ativos.map((p, i) => {
-              const isRed = p.mins >= 60;
-              const isAmber = p.mins >= 30 && !isRed;
-              const urgColor = isRed ? '#dc2626' : isAmber ? '#d97706' : '#047857';
-              const urgBg = isRed ? 'rgba(220,38,38,0.05)' : isAmber ? 'rgba(217,119,6,0.05)' : 'transparent';
-              const urgBorder = isRed ? 'rgba(220,38,38,0.15)' : isAmber ? 'rgba(217,119,6,0.15)' : 'var(--border)';
-              const produtosStr = Array.isArray(p.produtos)
-                ? p.produtos.map((pr) => `${pr.qtd}× ${pr.produto}`).join(', ')
-                : '—';
-              return (
-                <div
-                  key={p.id}
-                  style={{
-                    padding: '16px 20px',
-                    background: urgBg,
-                    borderBottom: `1px solid ${i < ativos.length - 1 ? urgBorder : 'transparent'}`,
-                    borderLeft: `3px solid ${urgColor}`,
-                  }}
-                >
-                  {/* Row 1: ID + elapsed time badge */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '13px', fontWeight: 800, fontFamily: 'var(--font-space-mono)', color: 'var(--accent)' }}>#{p.id}</span>
-                      <span className={`status-badge status-${p.status}`} style={{ fontSize: '9px', padding: '2px 7px' }}>
-                        <svg width="4" height="4" viewBox="0 0 5 5" fill="currentColor"><circle cx="2.5" cy="2.5" r="2.5" /></svg>
-                        {STATUS_LABELS[p.status] ?? p.status}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '3px', background: `${urgColor}15`, border: `1px solid ${urgColor}35`, borderRadius: '20px', padding: '2px 8px' }}>
-                      <Clock size={9} style={{ color: urgColor }} />
-                      <span style={{ fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-space-mono)', color: urgColor }}>{p.mins}min</span>
-                    </div>
-                  </div>
-
-                  {/* Row 2: Products */}
-                  <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '6px' }}>
-                    {produtosStr}
-                  </p>
-
-                  {/* Row 3: Entregador + value */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <p style={{ fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '170px' }}>
-                      {p.entregador_nome ? `🚴 ${p.entregador_nome}` : `📍 ${p.bairro || p.endereco}`}
-                    </p>
-                    <p style={{ fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-space-mono)', color: 'var(--text-primary)', flexShrink: 0, marginLeft: '8px' }}>
-                      R$ {parseFloat(p.total).toFixed(0)}
-                    </p>
-                  </div>
-
-                  {/* Row 4: Time created */}
-                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginTop: '6px' }}>
-                    Criado às {fmtHHMM(p.created_at)}
-                  </p>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Legend Footer */}
-        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', background: 'var(--bg-surface-2)', display: 'flex', gap: '16px', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <div style={{ width: '3px', height: '14px', borderRadius: '2px', background: '#d97706', flexShrink: 0 }} />
-            <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)' }}>&gt;30min</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <div style={{ width: '3px', height: '14px', borderRadius: '2px', background: '#dc2626', flexShrink: 0 }} />
-            <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)' }}>&gt;60min</span>
-          </div>
-        </div>
+        <ConversasPanel />
       </aside>
 
     </div>
