@@ -156,7 +156,7 @@ export default function RetencaoPage() {
   ];
 
   return (
-    <main className="min-h-screen" style={{ padding: '32px 28px', maxWidth: 1200 }}>
+    <main className="min-h-screen" style={{ padding: '32px 28px', width: '100%' }}>
 
       {/* ── Header ── */}
       <header className="fade-up" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28 }}>

@@ -222,7 +222,7 @@ export default function RelatoriosPage() {
   const maxBairro = Math.max(...bairros.map(b => b.pedidos), 1);
 
   return (
-    <main style={{ padding: '32px 28px', maxWidth: 1160 }}>
+    <main style={{ padding: '32px 28px', width: '100%' }}>
       <style>{`
         @keyframes drawLine { to { stroke-dashoffset: 0; } }
         @keyframes fadeUp { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:translateY(0) } }

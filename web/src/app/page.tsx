@@ -112,7 +112,7 @@ export default async function DashboardPage() {
   const maxEntregadorAberto = Math.max(...byEntregador.map(e => e.emAberto), 1);
 
   return (
-    <main className="min-h-screen relative z-10" style={{ padding: '32px 28px', maxWidth: '1160px' }}>
+    <main className="min-h-screen relative z-10" style={{ padding: '32px 28px', width: '100%' }}>
 
       {/* ── Page Header ── */}
       <header className="fade-up" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '28px' }}>
