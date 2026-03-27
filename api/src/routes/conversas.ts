@@ -52,9 +52,11 @@ export async function conversasRoutes(server: FastifyInstance) {
           lv.session_id,
           lv.message,
           lv.last_id,
-          COALESCE(mc.cnt, 0) AS msgs_count
+          COALESCE(mc.cnt, 0) AS msgs_count,
+          tc.nome AS cliente_nome
         FROM last_visible lv
         LEFT JOIN msg_counts mc ON mc.session_id = lv.session_id
+        LEFT JOIN public.telegas_clientes tc ON tc.telefone = lv.session_id
         ORDER BY lv.last_id DESC
         LIMIT 12
       `);
@@ -64,6 +66,7 @@ export async function conversasRoutes(server: FastifyInstance) {
         lastMessage: r.message,
         lastId:      parseInt(r.last_id),
         msgsCount:   parseInt(r.msgs_count),
+        clienteNome: r.cliente_nome ?? null,
       }));
     } catch (err) {
       server.log.error(err);

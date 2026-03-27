@@ -16,6 +16,7 @@ interface Conversa {
   lastMessage: Mensagem;
   lastId: number;
   msgsCount: number;
+  clienteNome: string | null;
 }
 
 interface MensagemDetalhe {
@@ -66,7 +67,10 @@ function ConversaDetail({ conversa, onClose }: { conversa: Conversa; onClose: ()
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-space-mono)' }}>
-            {formatPhone(conversa.sessionId)}
+            {conversa.clienteNome
+              ? <>{conversa.clienteNome} <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>({formatPhone(conversa.sessionId)})</span></>
+              : formatPhone(conversa.sessionId)
+            }
           </p>
           <p style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)' }}>
             {conversa.msgsCount} mensagens recentes
@@ -193,7 +197,10 @@ export default function ConversasPanel() {
                       <User size={13} style={{ color: 'var(--accent)' }} />
                     </div>
                     <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-space-mono)' }}>
-                      {formatPhone(c.sessionId)}
+                      {c.clienteNome
+                        ? <>{c.clienteNome} <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>({formatPhone(c.sessionId)})</span></>
+                        : formatPhone(c.sessionId)
+                      }
                     </p>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
