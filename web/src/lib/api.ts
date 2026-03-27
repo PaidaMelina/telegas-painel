@@ -26,6 +26,12 @@ export const api = {
     return res.json();
   },
 
+  getDashboardProdutosHoje: async () => {
+    const res = await fetch(`${API_URL}/dashboard/produtos-hoje`, { next: { revalidate: 30 } });
+    if (!res.ok) throw new Error('Failed to fetch produtos hoje');
+    return res.json();
+  },
+
   getDashboardByEntregador: async () => {
     const res = await fetch(`${API_URL}/dashboard/by-entregador`, { next: { revalidate: 30 } });
     if (!res.ok) throw new Error('Failed to fetch by entregador');

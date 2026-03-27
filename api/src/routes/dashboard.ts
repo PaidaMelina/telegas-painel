@@ -112,6 +112,46 @@ export async function dashboardRoutes(server: FastifyInstance) {
     }
   });
 
+  server.get('/produtos-hoje', async (_request, reply) => {
+    try {
+      const { rows } = await pool.query(`
+        SELECT
+          CASE
+            WHEN LOWER(item->>'produto') LIKE '%azul%'
+              OR LOWER(item->>'produto') LIKE '%ultragaz%'   THEN 'gas_azul'
+            WHEN LOWER(item->>'produto') LIKE '%cinza%'
+              OR LOWER(item->>'produto') LIKE '%nacional%'
+              OR LOWER(item->>'produto') LIKE '%branco%'     THEN 'gas_nacional'
+            WHEN LOWER(item->>'produto') LIKE '%agua%'
+              OR LOWER(item->>'produto') LIKE '%água%'       THEN 'agua'
+            ELSE 'outros'
+          END AS categoria,
+          SUM((item->>'qtd')::int)                                         AS qtd,
+          SUM((item->>'qtd')::int * (item->>'preco')::numeric)             AS receita
+        FROM public.telegas_pedidos,
+             jsonb_array_elements(produtos::jsonb) AS item
+        WHERE DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE
+          AND status != 'cancelado'
+        GROUP BY categoria
+      `);
+
+      const map: Record<string, { qtd: number; receita: number }> = {};
+      for (const r of rows) {
+        map[r.categoria] = { qtd: parseInt(r.qtd), receita: parseFloat(r.receita) };
+      }
+      const zero = { qtd: 0, receita: 0 };
+      return {
+        gasAzul:     map['gas_azul']     ?? zero,
+        gasNacional: map['gas_nacional'] ?? zero,
+        agua:        map['agua']         ?? zero,
+        outros:      map['outros']       ?? zero,
+      };
+    } catch (err) {
+      server.log.error(err);
+      return reply.code(500).send({ error: 'Erro ao buscar produtos' });
+    }
+  });
+
   server.get('/by-entregador', async (_request, reply) => {
     try {
       const { rows } = await pool.query(`

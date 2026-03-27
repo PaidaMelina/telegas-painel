@@ -65,16 +65,21 @@ function urgencyRowStyle(p: Pedido): React.CSSProperties {
   return {};
 }
 
+interface ProdutoStat { qtd: number; receita: number; }
+interface ProdutosHoje { gasAzul: ProdutoStat; gasNacional: ProdutoStat; agua: ProdutoStat; outros: ProdutoStat; }
+
 export default async function DashboardPage() {
   let summary = { hoje: { total: 0, entregues: 0 }, emAberto: 0 };
   let pedidos: Pedido[] = [];
-  let metrics = { ticketMedio: 0, tempoMedioAtribuicao: 0, tempoMedioEntrega: 0, pedidosAtrasados: 0 };
+  let metrics = { ticketMedio: 0, tempoMedioEntrega: 0, pedidosAtrasados: 0 };
   let statusDist: { status: string; count: number }[] = [];
   let byBairro: { bairro: string; count: number; total: number }[] = [];
   let byEntregador: { nome: string; emAberto: number; entreguesHoje: number; tempoMedio: number }[] = [];
+  const zero: ProdutoStat = { qtd: 0, receita: 0 };
+  let produtos: ProdutosHoje = { gasAzul: zero, gasNacional: zero, agua: zero, outros: zero };
   let apiError = false;
 
-  const [summaryResult, pedidosResult, metricsResult, statusDistResult, byBairroResult, byEntregadorResult] =
+  const [summaryResult, pedidosResult, metricsResult, statusDistResult, byBairroResult, byEntregadorResult, produtosResult] =
     await Promise.allSettled([
       api.getDashboardSummary(),
       api.getPedidos({ limit: '20' }),
@@ -82,6 +87,7 @@ export default async function DashboardPage() {
       api.getDashboardStatusDistribution(),
       api.getDashboardByBairro(),
       api.getDashboardByEntregador(),
+      api.getDashboardProdutosHoje(),
     ]);
 
   if (summaryResult.status === 'fulfilled') {
@@ -94,6 +100,7 @@ export default async function DashboardPage() {
   if (statusDistResult.status === 'fulfilled') statusDist = statusDistResult.value;
   if (byBairroResult.status === 'fulfilled') byBairro = byBairroResult.value;
   if (byEntregadorResult.status === 'fulfilled') byEntregador = byEntregadorResult.value;
+  if (produtosResult.status === 'fulfilled') produtos = produtosResult.value;
 
   const taxaConclusao =
     summary.hoje.total > 0
@@ -111,6 +118,9 @@ export default async function DashboardPage() {
     (a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)
   );
   const maxEntregadorAberto = Math.max(...byEntregador.map(e => e.emAberto), 1);
+
+  const totalUnid = produtos.gasAzul.qtd + produtos.gasNacional.qtd + produtos.agua.qtd + produtos.outros.qtd || 1;
+  const totalReceita = produtos.gasAzul.receita + produtos.gasNacional.receita + produtos.agua.receita + produtos.outros.receita;
 
   return (
     <div style={{ display: 'flex', alignItems: 'stretch', width: '100%', minHeight: '100vh' }}>
@@ -235,6 +245,86 @@ export default async function DashboardPage() {
               {metrics.pedidosAtrasados}
             </p>
             <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px', fontFamily: 'var(--font-space-mono)' }}>em aberto há mais de 60min</p>
+          </div>
+        </div>
+
+        {/* ── Mix de Produtos · Hoje ── */}
+        <div className="fade-up-2" style={{ marginBottom: '28px' }}>
+          {/* Section label + stacked bar */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <p style={{ fontSize: '10px', letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'var(--font-space-mono)' }}>
+              Mix de Produtos · Hoje
+            </p>
+            <p style={{ fontSize: '11px', fontWeight: 700, fontFamily: 'var(--font-space-mono)', color: 'var(--text-primary)' }}>
+              {totalUnid === 1 && produtos.gasAzul.qtd === 0 ? '—' : `${totalUnid} unid`}
+              <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: '8px' }}>
+                R$ {totalReceita.toFixed(0)}
+              </span>
+            </p>
+          </div>
+
+          {/* Stacked proportion bar */}
+          <div style={{ height: '6px', borderRadius: '4px', overflow: 'hidden', display: 'flex', marginBottom: '14px', background: 'var(--bg-surface-3)', gap: '1px' }}>
+            {[
+              { pct: (produtos.gasAzul.qtd / totalUnid) * 100, color: '#2557e7' },
+              { pct: (produtos.gasNacional.qtd / totalUnid) * 100, color: '#64748b' },
+              { pct: (produtos.agua.qtd / totalUnid) * 100, color: '#0891b2' },
+              { pct: (produtos.outros.qtd / totalUnid) * 100, color: '#94a3b8' },
+            ].filter(s => s.pct > 0).map((s, i) => (
+              <div key={i} style={{ width: `${s.pct}%`, background: s.color, height: '100%', borderRadius: '2px', transition: 'width 0.5s ease' }} />
+            ))}
+          </div>
+
+          {/* 4-column product cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+            {[
+              { label: 'Gás Azul', sub: 'Ultragaz', data: produtos.gasAzul, color: '#2557e7', bg: 'rgba(37,87,231,0.06)', icon: (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2557e7" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2C6.5 7 4 11 4 14a8 8 0 0016 0c0-3-2.5-7-8-12z"/><path d="M12 12v4"/></svg>
+              )},
+              { label: 'Gás Nacional', sub: 'Granel / Cinza', data: produtos.gasNacional, color: '#475569', bg: 'rgba(71,85,105,0.06)', icon: (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2C6.5 7 4 11 4 14a8 8 0 0016 0c0-3-2.5-7-8-12z"/><path d="M12 12v4"/></svg>
+              )},
+              { label: 'Água', sub: '20 Litros', data: produtos.agua, color: '#0891b2', bg: 'rgba(8,145,178,0.06)', icon: (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0891b2" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg>
+              )},
+              { label: 'Outros', sub: 'Produtos', data: produtos.outros, color: '#94a3b8', bg: 'rgba(148,163,184,0.06)', icon: (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+              )},
+            ].map(({ label, sub, data, color, bg, icon }) => {
+              const pct = Math.round((data.qtd / totalUnid) * 100);
+              return (
+                <div key={label} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '10px', borderTop: `2px solid ${color}`, padding: '18px 20px', position: 'relative', overflow: 'hidden' }}>
+                  {/* Background tint */}
+                  <div style={{ position: 'absolute', inset: 0, background: bg, pointerEvents: 'none' }} />
+                  {/* Header row */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '14px', position: 'relative' }}>
+                    <div>
+                      <p style={{ fontSize: '10px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700, color, fontFamily: 'var(--font-space-mono)' }}>{label}</p>
+                      <p style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginTop: '1px' }}>{sub}</p>
+                    </div>
+                    <div style={{ opacity: 0.7 }}>{icon}</div>
+                  </div>
+                  {/* Big number */}
+                  <p style={{ fontSize: '48px', fontWeight: 900, lineHeight: 1, fontFamily: 'var(--font-barlow)', color: data.qtd > 0 ? color : 'var(--text-muted)', position: 'relative', marginBottom: '4px' }}>
+                    {data.qtd}
+                  </p>
+                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginBottom: '12px', position: 'relative' }}>
+                    unidades vendidas
+                  </p>
+                  {/* Revenue */}
+                  <p style={{ fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-space-mono)', color: 'var(--text-secondary)', position: 'relative', marginBottom: '10px' }}>
+                    R$ {data.receita.toFixed(2)}
+                  </p>
+                  {/* Progress bar */}
+                  <div style={{ height: '4px', background: 'var(--bg-surface-3)', borderRadius: '2px', overflow: 'hidden', position: 'relative' }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: '2px', transition: 'width 0.5s ease', opacity: data.qtd > 0 ? 0.7 : 0 }} />
+                  </div>
+                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginTop: '4px', position: 'relative' }}>
+                    {data.qtd > 0 ? `${pct}% do total` : '—'}
+                  </p>
+                </div>
+              );
+            })}
           </div>
         </div>
 
