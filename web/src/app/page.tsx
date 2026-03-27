@@ -1,5 +1,6 @@
+import React from 'react';
 import { api } from '@/lib/api';
-import { Package, CheckCircle2, Truck, AlertTriangle, ArrowRight, TrendingUp, Clock, Users } from 'lucide-react';
+import { Package, CheckCircle2, Truck, AlertTriangle, ArrowRight, TrendingUp, Clock, Users, Timer } from 'lucide-react';
 import Link from 'next/link';
 
 export const revalidate = 30;
@@ -37,8 +38,30 @@ interface Pedido {
   bairro: string;
   status: string;
   created_at: string;
+  atribuido_em: string | null;
+  entregue_em: string | null;
+  cancelado_em: string | null;
   entregador_nome: string | null;
   tempo_entrega_min: number | null;
+}
+
+const ACTIVE_STATUSES = new Set(['novo', 'atribuido', 'saiu_para_entrega']);
+
+function fmtHHMM(iso: string | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+}
+
+function elapsedMin(iso: string): number {
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+}
+
+function urgencyRowStyle(p: Pedido): React.CSSProperties {
+  if (!ACTIVE_STATUSES.has(p.status)) return {};
+  const mins = elapsedMin(p.created_at);
+  if (mins >= 60) return { background: 'rgba(220,38,38,0.07)' };
+  if (mins >= 30) return { background: 'rgba(217,119,6,0.07)' };
+  return {};
 }
 
 export default async function DashboardPage() {
@@ -354,72 +377,170 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* ── Orders Table ── */}
-      <div className="fade-up-4">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-          <h2 style={{ fontSize: '10px', letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'var(--font-space-mono)' }}>
-            Pedidos Recentes
-          </h2>
-          <Link href="/pedidos" className="link-accent" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', padding: '3px 10px', borderRadius: '3px', background: 'var(--accent-dim)', color: 'var(--accent)', fontFamily: 'var(--font-space-mono)', letterSpacing: '0.06em', textDecoration: 'none', transition: 'all 0.2s ease' }}>
-            VER TODOS <ArrowRight size={12} />
-          </Link>
+      {/* ── Orders Section: Table + Em Andamento Panel ── */}
+      <div className="fade-up-4" style={{ display: 'grid', gridTemplateColumns: '1fr 288px', gap: '14px', alignItems: 'start' }}>
+
+        {/* Table */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+            <h2 style={{ fontSize: '10px', letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'var(--font-space-mono)' }}>
+              Pedidos Recentes
+            </h2>
+            <Link href="/pedidos" className="link-accent" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px', padding: '3px 10px', borderRadius: '3px', background: 'var(--accent-dim)', color: 'var(--accent)', fontFamily: 'var(--font-space-mono)', letterSpacing: '0.06em', textDecoration: 'none', transition: 'all 0.2s ease' }}>
+              VER TODOS <ArrowRight size={12} />
+            </Link>
+          </div>
+
+          <div style={{ border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: 'var(--bg-surface-2)', borderBottom: '1px solid var(--border)' }}>
+                  {['#', 'Produtos', 'Entregador', 'Criado', 'Concluído', 'Total', 'Status'].map((h) => (
+                    <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: '10px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)' }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {pedidos.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)', fontSize: '13px', fontFamily: 'var(--font-space-mono)' }}>
+                      Nenhum pedido encontrado
+                    </td>
+                  </tr>
+                ) : (
+                  pedidos.map((p) => {
+                    const produtosStr = Array.isArray(p.produtos)
+                      ? p.produtos.map((pr) => `${pr.qtd}× ${pr.produto}`).join(', ')
+                      : '—';
+                    const isActive = ACTIVE_STATUSES.has(p.status);
+                    const rowUrgency = urgencyRowStyle(p);
+                    const conclusaoTime = fmtHHMM(p.entregue_em ?? p.cancelado_em ?? null);
+                    return (
+                      <tr key={p.id} className="orders-row" style={{ background: rowUrgency.background ?? 'var(--bg-surface)', ...rowUrgency }}>
+                        <td style={{ padding: '11px 14px', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-space-mono)', color: 'var(--accent)', borderLeft: `3px solid ${STATUS_COLORS[p.status] ?? '#333'}` }}>#{p.id}</td>
+                        <td style={{ padding: '11px 14px', fontSize: '12px', color: 'var(--text-primary)', maxWidth: '180px' }}>
+                          <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{produtosStr}</span>
+                        </td>
+                        <td style={{ padding: '11px 14px', fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                          {p.entregador_nome ?? <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                        </td>
+                        <td style={{ padding: '11px 14px', fontSize: '11px', fontFamily: 'var(--font-space-mono)', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                          {fmtHHMM(p.created_at)}
+                        </td>
+                        <td style={{ padding: '11px 14px', fontSize: '11px', fontFamily: 'var(--font-space-mono)', whiteSpace: 'nowrap' }}>
+                          {isActive ? (
+                            <span style={{ color: 'var(--text-muted)' }}>em aberto</span>
+                          ) : (
+                            <span style={{ color: p.status === 'entregue' ? '#047857' : '#c81e1e', fontWeight: 600 }}>
+                              {conclusaoTime}
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ padding: '11px 14px', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-space-mono)', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                          R$ {parseFloat(p.total).toFixed(2)}
+                        </td>
+                        <td style={{ padding: '11px 14px' }}>
+                          <span className={`status-badge status-${p.status}`}>
+                            <svg width="5" height="5" viewBox="0 0 5 5" fill="currentColor"><circle cx="2.5" cy="2.5" r="2.5" /></svg>
+                            {STATUS_LABELS[p.status] ?? p.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        <div style={{ border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: 'var(--bg-surface-2)', borderBottom: '1px solid var(--border)' }}>
-                {['#', 'Produtos', 'Endereço', 'Entregador', 'Tempo', 'Total', 'Status'].map((h) => (
-                  <th key={h} style={{ textAlign: 'left', padding: '10px 18px', fontSize: '10px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)' }}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {pedidos.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)', fontSize: '13px', fontFamily: 'var(--font-space-mono)' }}>
-                    Nenhum pedido encontrado
-                  </td>
-                </tr>
-              ) : (
-                pedidos.map((p) => {
-                  const produtosStr = Array.isArray(p.produtos)
-                    ? p.produtos.map((pr) => `${pr.qtd}× ${pr.produto}`).join(', ')
-                    : '—';
-                  return (
-                    <tr key={p.id} className="orders-row" style={{ background: 'var(--bg-surface)' }}>
-                      <td style={{ padding: '13px 18px', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-space-mono)', color: 'var(--accent)', borderLeft: `3px solid ${STATUS_COLORS[p.status] ?? '#333'}` }}>#{p.id}</td>
-                      <td style={{ padding: '13px 18px', fontSize: '13px', color: 'var(--text-primary)', maxWidth: '200px' }}>
-                        <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{produtosStr}</span>
-                      </td>
-                      <td style={{ padding: '13px 18px', fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '180px' }}>
-                        <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {p.endereco}{p.bairro ? ` — ${p.bairro}` : ''}
-                        </span>
-                      </td>
-                      <td style={{ padding: '13px 18px', fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                        {p.entregador_nome ?? <span style={{ color: 'var(--text-muted)' }}>—</span>}
-                      </td>
-                      <td style={{ padding: '13px 18px', fontSize: '12px', fontFamily: 'var(--font-space-mono)', color: p.tempo_entrega_min != null ? 'var(--text-secondary)' : 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                        {p.tempo_entrega_min != null ? `${p.tempo_entrega_min}min` : '—'}
-                      </td>
-                      <td style={{ padding: '13px 18px', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-space-mono)', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                        R$ {parseFloat(p.total).toFixed(2)}
-                      </td>
-                      <td style={{ padding: '13px 18px' }}>
-                        <span className={`status-badge status-${p.status}`}>
-                          <svg width="5" height="5" viewBox="0 0 5 5" fill="currentColor"><circle cx="2.5" cy="2.5" r="2.5" /></svg>
-                          {STATUS_LABELS[p.status] ?? p.status}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+        {/* Em Andamento Panel */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+            <h2 style={{ fontSize: '10px', letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'var(--font-space-mono)' }}>
+              Em Andamento
+            </h2>
+            <Timer size={12} style={{ color: 'var(--text-muted)' }} />
+          </div>
+
+          <div style={{ border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden', background: 'var(--bg-surface)' }}>
+            {(() => {
+              const ativos = pedidos
+                .filter((p) => ACTIVE_STATUSES.has(p.status))
+                .map((p) => ({ ...p, mins: elapsedMin(p.created_at) }))
+                .sort((a, b) => b.mins - a.mins);
+
+              if (ativos.length === 0) {
+                return (
+                  <div style={{ padding: '32px 20px', textAlign: 'center' }}>
+                    <CheckCircle2 size={24} style={{ color: '#047857', opacity: 0.5, margin: '0 auto 10px' }} />
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)' }}>Nenhum pedido ativo</p>
+                  </div>
+                );
+              }
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  {ativos.map((p, i) => {
+                    const isRed = p.mins >= 60;
+                    const isAmber = p.mins >= 30 && !isRed;
+                    const urgColor = isRed ? '#dc2626' : isAmber ? '#d97706' : '#047857';
+                    const urgBg = isRed ? 'rgba(220,38,38,0.07)' : isAmber ? 'rgba(217,119,6,0.07)' : 'transparent';
+                    const produtosStr = Array.isArray(p.produtos)
+                      ? p.produtos.map((pr) => `${pr.qtd}× ${pr.produto}`).join(', ')
+                      : '—';
+                    return (
+                      <div
+                        key={p.id}
+                        style={{
+                          padding: '14px 16px',
+                          background: urgBg,
+                          borderBottom: i < ativos.length - 1 ? '1px solid var(--border)' : 'none',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-space-mono)', color: 'var(--accent)' }}>#{p.id}</span>
+                            <span className={`status-badge status-${p.status}`} style={{ fontSize: '9px' }}>
+                              <svg width="4" height="4" viewBox="0 0 5 5" fill="currentColor"><circle cx="2.5" cy="2.5" r="2.5" /></svg>
+                              {STATUS_LABELS[p.status] ?? p.status}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: `${urgColor}18`, border: `1px solid ${urgColor}30`, borderRadius: '4px', padding: '2px 7px' }}>
+                            <Clock size={9} style={{ color: urgColor }} />
+                            <span style={{ fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-space-mono)', color: urgColor }}>{p.mins}min</span>
+                          </div>
+                        </div>
+                        <p style={{ fontSize: '12px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '3px' }}>{produtosStr}</p>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <p style={{ fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '155px' }}>
+                            {p.entregador_nome ? `🚴 ${p.entregador_nome}` : `📍 ${p.bairro || p.endereco}`}
+                          </p>
+                          <p style={{ fontSize: '11px', fontWeight: 700, fontFamily: 'var(--font-space-mono)', color: 'var(--text-primary)', flexShrink: 0, marginLeft: '8px' }}>
+                            R$ {parseFloat(p.total).toFixed(0)}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            {/* Legend */}
+            <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', background: 'var(--bg-surface-2)', display: 'flex', gap: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: 'rgba(217,119,6,0.4)', flexShrink: 0 }} />
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)' }}>&gt;30min</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: 'rgba(220,38,38,0.4)', flexShrink: 0 }} />
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)' }}>&gt;60min</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
