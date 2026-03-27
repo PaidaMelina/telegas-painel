@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { MessageCircle, Bot, User, RefreshCw, Clock } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333/api';
-const POLL_INTERVAL = 5000; // 5 seconds
+const POLL_INTERVAL = 15000; // 15 seconds
 
 interface Mensagem {
   type: 'human' | 'ai';
@@ -14,13 +14,13 @@ interface Mensagem {
 interface Conversa {
   sessionId: string;
   lastMessage: Mensagem;
-  lastActivity: string;
+  lastId: number;
   msgsCount: number;
 }
 
 interface MensagemDetalhe {
+  id: number;
   message: Mensagem;
-  createdAt: string;
 }
 
 function formatPhone(sessionId: string): string {
@@ -31,20 +31,11 @@ function formatPhone(sessionId: string): string {
   return local;
 }
 
-function timeAgo(iso: string): string {
-  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (mins < 1) return 'agora';
-  if (mins === 1) return '1 min';
-  if (mins < 60) return `${mins} min`;
-  return `${Math.floor(mins / 60)}h`;
-}
-
 function truncate(text: string, max = 72): string {
   const clean = text.replace(/\n+/g, ' ').trim();
   return clean.length > max ? clean.slice(0, max) + '…' : clean;
 }
 
-// Expanded detail view for a single conversation
 function ConversaDetail({ conversa, onClose }: { conversa: Conversa; onClose: () => void }) {
   const [msgs, setMsgs] = useState<MensagemDetalhe[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,12 +55,12 @@ function ConversaDetail({ conversa, onClose }: { conversa: Conversa; onClose: ()
   }, [fetchMsgs]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Detail header */}
-      <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--bg-surface-2)', flexShrink: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      {/* Header */}
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--bg-surface-2)', flexShrink: 0 }}>
         <button
           onClick={onClose}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px', display: 'flex', alignItems: 'center' }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '4px 6px', fontSize: '14px', borderRadius: '4px', lineHeight: 1 }}
         >
           ←
         </button>
@@ -78,7 +69,7 @@ function ConversaDetail({ conversa, onClose }: { conversa: Conversa; onClose: ()
             {formatPhone(conversa.sessionId)}
           </p>
           <p style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)' }}>
-            {conversa.msgsCount} mensagens · {timeAgo(conversa.lastActivity)} atrás
+            {conversa.msgsCount} mensagens recentes
           </p>
         </div>
       </div>
@@ -94,10 +85,10 @@ function ConversaDetail({ conversa, onClose }: { conversa: Conversa; onClose: ()
             Sem mensagens
           </div>
         ) : (
-          msgs.map((m, i) => {
+          msgs.map((m) => {
             const isAI = m.message.type === 'ai';
             return (
-              <div key={i} style={{ display: 'flex', flexDirection: isAI ? 'row' : 'row-reverse', gap: '7px', alignItems: 'flex-end' }}>
+              <div key={m.id} style={{ display: 'flex', flexDirection: isAI ? 'row' : 'row-reverse', gap: '7px', alignItems: 'flex-end' }}>
                 <div style={{
                   width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
                   background: isAI ? 'var(--accent-dim)' : 'var(--bg-surface-3)',
@@ -109,7 +100,7 @@ function ConversaDetail({ conversa, onClose }: { conversa: Conversa; onClose: ()
                   }
                 </div>
                 <div style={{
-                  maxWidth: '78%',
+                  maxWidth: '80%',
                   padding: '7px 10px',
                   borderRadius: isAI ? '2px 10px 10px 10px' : '10px 2px 10px 10px',
                   background: isAI ? 'var(--accent-dim)' : 'var(--bg-surface-3)',
@@ -119,7 +110,7 @@ function ConversaDetail({ conversa, onClose }: { conversa: Conversa; onClose: ()
                     {m.message.content}
                   </p>
                   <p style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: '3px', fontFamily: 'var(--font-space-mono)', textAlign: isAI ? 'left' : 'right' }}>
-                    {new Date(m.createdAt).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}
+                    #{m.id}
                   </p>
                 </div>
               </div>
@@ -154,25 +145,23 @@ export default function ConversasPanel() {
     return () => clearInterval(t);
   }, [fetchConversas]);
 
-  // If a conversation is selected, show detail view
   if (selected) {
     return <ConversaDetail conversa={selected} onClose={() => setSelected(null)} />;
   }
 
   return (
     <>
-      {/* Scrollable list */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {loading ? (
           <div style={{ padding: '48px 20px', textAlign: 'center' }}>
-            <RefreshCw size={20} style={{ color: 'var(--text-muted)', opacity: 0.4, margin: '0 auto 10px', animation: 'spin 1s linear infinite' }} />
+            <RefreshCw size={20} style={{ color: 'var(--text-muted)', opacity: 0.4, margin: '0 auto 10px' }} />
             <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)' }}>Carregando…</p>
           </div>
         ) : conversas.length === 0 ? (
           <div style={{ padding: '48px 20px', textAlign: 'center' }}>
             <MessageCircle size={28} style={{ color: 'var(--text-muted)', opacity: 0.25, margin: '0 auto 12px' }} />
             <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', lineHeight: 1.6 }}>
-              Nenhuma conversa<br />nos últimos 30 min
+              Nenhuma conversa<br />recente
             </p>
           </div>
         ) : (
@@ -197,34 +186,29 @@ export default function ConversasPanel() {
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-2)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               >
-                {/* Row 1: phone + time */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '5px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                {/* Phone + msg count */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <User size={13} style={{ color: 'var(--accent)' }} />
                     </div>
-                    <div>
-                      <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-space-mono)', lineHeight: 1 }}>
-                        {formatPhone(c.sessionId)}
-                      </p>
-                      <p style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginTop: '2px' }}>
-                        {c.msgsCount} msgs
-                      </p>
-                    </div>
+                    <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-space-mono)' }}>
+                      {formatPhone(c.sessionId)}
+                    </p>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
                     <Clock size={9} style={{ color: 'var(--text-muted)' }} />
                     <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)' }}>
-                      {timeAgo(c.lastActivity)}
+                      {c.msgsCount} msgs
                     </span>
                   </div>
                 </div>
 
-                {/* Row 2: last message preview */}
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '5px', paddingLeft: '35px' }}>
+                {/* Last message preview */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '5px', paddingLeft: '36px' }}>
                   {isAI
-                    ? <Bot size={10} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: '1px' }} />
-                    : <User size={10} style={{ color: 'var(--text-muted)', flexShrink: 0, marginTop: '1px' }} />
+                    ? <Bot size={10} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: '2px' }} />
+                    : <User size={10} style={{ color: 'var(--text-muted)', flexShrink: 0, marginTop: '2px' }} />
                   }
                   <p style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                     {preview}
@@ -236,13 +220,16 @@ export default function ConversasPanel() {
         )}
       </div>
 
-      {/* Footer: last update */}
+      {/* Footer */}
       <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', background: 'var(--bg-surface-2)', display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', flexShrink: 0, animation: 'live-pulse 2.5s ease-in-out infinite' }} />
+        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', flexShrink: 0, animation: 'sidebar-live-pulse 2.5s ease-in-out infinite' }} />
         <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)' }}>
           {lastUpdate
-            ? `atualizado ${lastUpdate.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+            ? `${lastUpdate.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
             : 'atualizando…'}
+        </span>
+        <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginLeft: 'auto' }}>
+          a cada 15s
         </span>
       </div>
     </>

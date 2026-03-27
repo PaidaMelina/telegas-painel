@@ -10,58 +10,60 @@ const SYSTEM_FILTERS = [
   '%tool_result%',
 ];
 
-function buildExcludeWhere(col: string): string {
+function buildExclude(col: string): string {
   return SYSTEM_FILTERS.map(f => `(${col}) NOT ILIKE '${f}'`).join(' AND ');
 }
 
 export async function conversasRoutes(server: FastifyInstance) {
-  // GET /api/conversas/ativas — sessions with activity in the last 30 min
+  // GET /api/conversas/ativas
+  // "Recent" = sessions whose last message is within the last 300 rows globally
   server.get('/ativas', async (_request, reply) => {
     try {
-      const exclude = buildExcludeWhere("t.message->>'content'");
-      const excludeC = buildExcludeWhere("c.message->>'content'");
+      const exclude = buildExclude("t.message->>'content'");
 
       const { rows } = await pool.query(`
-        WITH recent_sessions AS (
-          SELECT
-            session_id,
-            MAX(created_at) AS last_activity,
-            MAX(id)         AS last_id
-          FROM public.telegas_memoria_chat
-          WHERE created_at > NOW() - INTERVAL '30 minutes'
+        WITH global_max AS (
+          SELECT COALESCE(MAX(id), 0) AS max_id FROM public.telegas_memoria_chat
+        ),
+        recent_sessions AS (
+          SELECT session_id, MAX(id) AS last_id
+          FROM public.telegas_memoria_chat, global_max
+          WHERE id > global_max.max_id - 300
           GROUP BY session_id
         ),
         last_visible AS (
           SELECT DISTINCT ON (t.session_id)
             t.session_id,
             t.message,
-            rs.last_activity
+            rs.last_id
           FROM public.telegas_memoria_chat t
           JOIN recent_sessions rs ON rs.session_id = t.session_id
           WHERE ${exclude}
           ORDER BY t.session_id, t.id DESC
+        ),
+        msg_counts AS (
+          SELECT session_id, COUNT(*) AS cnt
+          FROM public.telegas_memoria_chat, global_max
+          WHERE id > global_max.max_id - 300
+            AND ${buildExclude("message->>'content'")}
+          GROUP BY session_id
         )
         SELECT
           lv.session_id,
           lv.message,
-          lv.last_activity,
-          (
-            SELECT COUNT(*)
-            FROM public.telegas_memoria_chat c
-            WHERE c.session_id = lv.session_id
-              AND c.created_at > NOW() - INTERVAL '30 minutes'
-              AND ${excludeC}
-          ) AS msgs_count
+          lv.last_id,
+          COALESCE(mc.cnt, 0) AS msgs_count
         FROM last_visible lv
-        ORDER BY lv.last_activity DESC
+        LEFT JOIN msg_counts mc ON mc.session_id = lv.session_id
+        ORDER BY lv.last_id DESC
         LIMIT 12
       `);
 
       return rows.map((r: any) => ({
-        sessionId:    r.session_id,
-        lastMessage:  r.message,
-        lastActivity: r.last_activity,
-        msgsCount:    parseInt(r.msgs_count),
+        sessionId:   r.session_id,
+        lastMessage: r.message,
+        lastId:      parseInt(r.last_id),
+        msgsCount:   parseInt(r.msgs_count),
       }));
     } catch (err) {
       server.log.error(err);
@@ -69,23 +71,23 @@ export async function conversasRoutes(server: FastifyInstance) {
     }
   });
 
-  // GET /api/conversas/:sessionId — last N messages of a session (for preview)
+  // GET /api/conversas/:sessionId — last 8 visible messages
   server.get('/:sessionId', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
-    const exclude = buildExcludeWhere("message->>'content'");
+    const exclude = buildExclude("message->>'content'");
     try {
       const { rows } = await pool.query(`
-        SELECT message, created_at
+        SELECT id, message
         FROM public.telegas_memoria_chat
         WHERE session_id = $1
           AND ${exclude}
         ORDER BY id DESC
-        LIMIT 6
+        LIMIT 8
       `, [sessionId]);
 
       return rows.reverse().map((r: any) => ({
-        message:   r.message,
-        createdAt: r.created_at,
+        id:      r.id,
+        message: r.message,
       }));
     } catch (err) {
       server.log.error(err);
