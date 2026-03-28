@@ -46,13 +46,6 @@ function getCoords(bairro: string): [number, number] | null {
   return null;
 }
 
-function getColor(ratio: number): string {
-  // ratio: 0 (low) → 1 (high)
-  if (ratio < 0.25) return '#2557e7';
-  if (ratio < 0.5)  return '#06b6d4';
-  if (ratio < 0.75) return '#f59e0b';
-  return '#ef4444';
-}
 
 export default function MapaCalor({ dados, coordenadas }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -89,58 +82,43 @@ export default function MapaCalor({ dados, coordenadas }: Props) {
         maxZoom: 19,
       }).addTo(map);
 
-      // Render Geocoded Points via Heatmap if available
-      if (coordenadas && coordenadas.length > 0 && typeof (window as any).L.heatLayer === 'function') {
-        const maxPtsCount = Math.max(...coordenadas.map((c: { lat: number; lng: number; count: number }) => c.count), 1);
-        const heatData = coordenadas.map((c: { lat: number; lng: number; count: number }) => [c.lat, c.lng, Math.min(c.count / maxPtsCount * 2, 1)]);
-        
-        (window as any).L.heatLayer(heatData, {
-          radius: 35,
-          blur: 25,
-          maxZoom: 16,
-          gradient: {
-            0.2: '#2557e7',
-            0.4: '#06b6d4',
-            0.6: '#f59e0b',
-            0.8: '#ef4444',
-            1.0: '#ff0000'
-          }
-        }).addTo(map);
-      } 
-      // Fallback to or render legacy Bairro Circles as well
-      else {
-        const maxCount = Math.max(...dados.map(d => d.count), 1);
+      const heatLayerFn = (window as any).L?.heatLayer;
 
-        dados.forEach((d) => {
+      // Build heatmap data: prefer real geocoded addresses, fallback to bairro centroids
+      let heatData: [number, number, number][] = [];
+
+      if (coordenadas && coordenadas.length > 0) {
+        const maxC = Math.max(...coordenadas.map(c => c.count), 1);
+        heatData = coordenadas.map(c => [c.lat, c.lng, Math.min(c.count / maxC, 1)] as [number, number, number]);
+      } else if (dados.length > 0) {
+        const maxCount = Math.max(...dados.map(d => d.count), 1);
+        dados.forEach(d => {
           const coords = getCoords(d.bairro);
           if (!coords) return;
-
-          const ratio = d.count / maxCount;
-          const radius = 10 + ratio * 20; // 10–30px
-          const color = getColor(ratio);
-
-          const circle = L.circleMarker(coords, {
-            radius,
-            fillColor: color,
-            fillOpacity: 0.35 + ratio * 0.25,
-            color: color,
-            weight: 2,
-            opacity: 0.85,
-          }).addTo(map);
-
-          circle.bindTooltip(`
-            <div style="font-family:monospace;font-size:12px;line-height:1.6;min-width:130px">
-              <strong style="font-size:13px;display:block;margin-bottom:4px">${d.bairro}</strong>
-              <span style="color:#9aa5b4">Pedidos:</span> <strong style="color:${color}">${d.count}</strong><br/>
-              <span style="color:#9aa5b4">Receita:</span> R$ ${d.total.toFixed(2)}
-            </div>
-          `, {
-            className: 'mapa-tooltip',
-            sticky: true,
-            direction: 'top',
-            offset: [0, -radius],
-          });
+          // Expand each bairro into multiple points to create a diffuse heat area
+          const intensity = d.count / maxCount;
+          const spread = 0.003; // ~300m spread
+          for (let i = 0; i < Math.ceil(d.count * 3); i++) {
+            const lat = coords[0] + (Math.random() - 0.5) * spread;
+            const lng = coords[1] + (Math.random() - 0.5) * spread;
+            heatData.push([lat, lng, intensity]);
+          }
         });
+      }
+
+      if (heatData.length > 0 && typeof heatLayerFn === 'function') {
+        heatLayerFn(heatData, {
+          radius: 30,
+          blur: 20,
+          maxZoom: 17,
+          gradient: {
+            0.0: '#3b82f6',
+            0.3: '#06b6d4',
+            0.6: '#f59e0b',
+            0.8: '#ef4444',
+            1.0: '#dc2626',
+          },
+        }).addTo(map);
       }
     })();
 
