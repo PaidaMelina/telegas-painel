@@ -215,4 +215,68 @@ export const api = {
     if (!res.ok) throw new Error('Failed to fetch mensagens');
     return res.json();
   },
+
+  getProdutos: async () => {
+    const res = await fetch(`${API_URL}/produtos`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch produtos');
+    return res.json();
+  },
+
+  criarProduto: async (data: { nome: string; preco: number; unidade?: string; quantidade?: number; quantidadeMinima?: number }) => {
+    const res = await fetch(`${API_URL}/produtos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Erro ao criar produto');
+    return res.json();
+  },
+
+  atualizarEstoque: async (id: number, tipo: 'entrada' | 'saida' | 'ajuste', quantidade: number, observacao?: string) => {
+    const res = await fetch(`${API_URL}/produtos/${id}/estoque`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipo, quantidade, observacao }),
+    });
+    if (!res.ok) throw new Error('Erro ao atualizar estoque');
+    return res.json();
+  },
+
+  buscarClientes: async (q: string) => {
+    const res = await fetch(`${API_URL}/clientes?search=${encodeURIComponent(q)}&limit=8`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Erro ao buscar clientes');
+    return res.json();
+  },
+
+  criarCliente: async (data: { nome: string; telefone: string; endereco?: string; bairro?: string }) => {
+    const res = await fetch(`${API_URL}/clientes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Erro ao criar cliente');
+    return res.json();
+  },
+
+  criarPedidoPortaria: async (data: {
+    clienteId?: number;
+    telefone: string;
+    nome: string;
+    endereco: string;
+    bairro?: string;
+    produtos: { id: number; nome: string; qtd: number; preco: number }[];
+    formaPagamento: string;
+    trocoPara?: number | null;
+  }) => {
+    const res = await fetch(`${API_URL}/portaria/pedido`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as any).error || 'Erro ao criar pedido');
+    }
+    return res.json();
+  },
 };

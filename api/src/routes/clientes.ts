@@ -156,6 +156,27 @@ export async function clientesRoutes(server: FastifyInstance) {
     }
   });
 
+  // POST /api/clientes
+  server.post('/', async (request, reply) => {
+    const { nome, telefone, endereco, bairro } = request.body as any;
+    if (!telefone) return reply.code(400).send({ error: 'Telefone obrigatório' });
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO public.telegas_clientes (telefone, nome, endereco, bairro)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (telefone) DO UPDATE SET
+           nome = COALESCE(EXCLUDED.nome, telegas_clientes.nome),
+           updated_at = NOW()
+         RETURNING *`,
+        [telefone.trim(), nome?.trim() || null, endereco?.trim() || null, bairro?.trim() || null]
+      );
+      return rows[0];
+    } catch (err) {
+      server.log.error(err);
+      return reply.code(500).send({ error: 'Erro ao criar cliente' });
+    }
+  });
+
   // PATCH /api/clientes/:id
   server.patch<{
     Params: { id: string };
