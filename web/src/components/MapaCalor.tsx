@@ -90,13 +90,13 @@ export default function MapaCalor({ dados, coordenadas }: Props) {
       }).addTo(map);
 
       // Render Geocoded Points via Heatmap if available
-      if (coordenadas && coordenadas.length > 0 && typeof (L as any).heatLayer === 'function') {
+      if (coordenadas && coordenadas.length > 0 && typeof (window as any).L.heatLayer === 'function') {
         const maxPtsCount = Math.max(...coordenadas.map((c: { lat: number; lng: number; count: number }) => c.count), 1);
         const heatData = coordenadas.map((c: { lat: number; lng: number; count: number }) => [c.lat, c.lng, Math.min(c.count / maxPtsCount * 2, 1)]);
         
-        (L as any).heatLayer(heatData, {
-          radius: 20,
-          blur: 15,
+        (window as any).L.heatLayer(heatData, {
+          radius: 35,
+          blur: 25,
           maxZoom: 16,
           gradient: {
             0.2: '#2557e7',

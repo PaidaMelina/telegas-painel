@@ -208,7 +208,7 @@ export async function dashboardRoutes(server: FastifyInstance) {
           AND TRIM(endereco) != ''
           AND ${whereClause}
         ORDER BY created_at DESC 
-        LIMIT 10
+        LIMIT 50
       `);
 
       const apiKey = process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyBY8YkjuUbLuODVYwlD8mNzO-72nMlJupY';
