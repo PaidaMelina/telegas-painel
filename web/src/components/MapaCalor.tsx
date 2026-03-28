@@ -82,8 +82,8 @@ export default function MapaCalor({ dados, coordenadas }: Props) {
       });
       mapRef.current = map;
 
-      // Dark tile layer
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      // Light tile layer
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
         attribution: '© OpenStreetMap contributors © CARTO',
         subdomains: 'abcd',
         maxZoom: 19,
@@ -116,16 +116,16 @@ export default function MapaCalor({ dados, coordenadas }: Props) {
           if (!coords) return;
 
           const ratio = d.count / maxCount;
-          const radius = 30 + ratio * 70; // 30–100px
+          const radius = 10 + ratio * 20; // 10–30px
           const color = getColor(ratio);
 
           const circle = L.circleMarker(coords, {
             radius,
             fillColor: color,
-            fillOpacity: 0.22 + ratio * 0.28,
+            fillOpacity: 0.35 + ratio * 0.25,
             color: color,
-            weight: 1.5,
-            opacity: 0.7,
+            weight: 2,
+            opacity: 0.85,
           }).addTo(map);
 
           circle.bindTooltip(`
