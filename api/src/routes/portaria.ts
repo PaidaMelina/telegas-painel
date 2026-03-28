@@ -13,6 +13,8 @@ export async function portariaRoutes(server: FastifyInstance) {
       produtos,
       formaPagamento,
       trocoPara,
+      lat,
+      lng,
     } = request.body as any;
 
     try {
@@ -62,14 +64,19 @@ export async function portariaRoutes(server: FastifyInstance) {
         produtos.map((p: any) => ({ produto: p.nome, qtd: p.qtd, preco: p.preco }))
       );
 
+      const latVal = lat ? parseFloat(lat) : null;
+      const lngVal = lng ? parseFloat(lng) : null;
+
       const { rows: pedidoRows } = await pool.query(
         `INSERT INTO public.telegas_pedidos
           (cliente_id, telefone_cliente, telefone, produtos, total, endereco, bairro,
-           troco_para, forma_pagamento, status, entregador_id, confirmado_em, atribuido_em)
-         VALUES ($1, $2, $2, $3::jsonb, $4, $5, $6, $7, $8, 'atribuido', $9, NOW(), NOW())
+           troco_para, forma_pagamento, status, entregador_id, confirmado_em, atribuido_em,
+           latitude, longitude)
+         VALUES ($1, $2, $2, $3::jsonb, $4, $5, $6, $7, $8, 'atribuido', $9, NOW(), NOW(), $10, $11)
          RETURNING id`,
         [cId, tel, produtosJson, total, endereco || '', bairro || null,
-         trocoPara ? parseFloat(trocoPara) : null, formaPagamento || null, entregador.id]
+         trocoPara ? parseFloat(trocoPara) : null, formaPagamento || null, entregador.id,
+         latVal, lngVal]
       );
 
       const pedidoId = pedidoRows[0].id;
