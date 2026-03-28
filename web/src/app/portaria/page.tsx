@@ -14,9 +14,10 @@ function loadGooglePlaces(callback: () => void) {
   }
   const s = document.createElement('script');
   s.id = 'gmaps-script';
-  s.src = `https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}&libraries=places`;
+  // Use loading=async to remove the sub-optimal performance warning
+  s.src = `https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}&libraries=places&loading=async`;
   s.async = true;
-  s.onload = callback;
+  s.onload = typeof (window as any).google !== 'undefined' ? callback : () => { setTimeout(callback, 500); };
   document.head.appendChild(s);
 }
 
