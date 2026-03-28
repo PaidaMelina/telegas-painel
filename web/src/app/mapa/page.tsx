@@ -22,12 +22,17 @@ const PERIODOS = [
 
 /* bairros conhecidos no mapa */
 const COORDS_KEYS = [
-  'centro','são marcos','jardim','parque','bairro novo',
-  'lacerdinha','são cristóvão','ponche verde','vila nova','progresso','aparecida','cohab',
+  'centro','porto','kennedy','pindorama','boa esperança','boa esperanca',
+  'vila militar','castelo branco','cohab','nossa sra','nossa senhora','conceição','conceicao',
+  'irineu','são jorge','sao jorge','prado',
 ];
 function isOnMap(bairro: string): boolean {
-  const b = bairro.toLowerCase().trim();
-  return COORDS_KEYS.some(k => k === b || b.includes(k) || k.includes(b));
+  const b = bairro.toLowerCase().trim()
+    .normalize('NFD').replace(/\p{Diacritic}/gu, '');
+  return COORDS_KEYS.some(k => {
+    const kn = k.normalize('NFD').replace(/\p{Diacritic}/gu, '');
+    return b === kn || b.includes(kn) || kn.includes(b);
+  });
 }
 
 export default function MapaPage() {
