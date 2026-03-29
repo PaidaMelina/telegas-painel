@@ -62,7 +62,7 @@ export default function PortariaPage() {
   const [buscando, setBuscando] = useState(false);
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null);
   const [showNovoForm, setShowNovoForm] = useState(false);
-  const [novoCliente, setNovoCliente] = useState({ nome: '', telefone: '', endereco: '', bairro: '' });
+  const [novoCliente, setNovoCliente] = useState({ nome: '', telefone: '', endereco: '', numero: '', complemento: '', bairro: '' });
   const [novoClienteCoords, setNovoClienteCoords] = useState<{lat: number, lng: number} | null>(null);
   const [criandoCliente, setCriandoCliente] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -107,12 +107,17 @@ export default function PortariaPage() {
         const lat = place.geometry.location.lat();
         const lng = place.geometry.location.lng();
         setNovoClienteCoords({ lat, lng });
+        
         const bairroComp = place.address_components?.find(
           (c: any) => c.types.includes('sublocality_level_1') || c.types.includes('neighborhood') || c.types.includes('sublocality')
         );
+        const routeComp = place.address_components?.find((c: any) => c.types.includes('route'));
+        const streetNumberComp = place.address_components?.find((c: any) => c.types.includes('street_number'));
+
         setNovoCliente(prev => ({
           ...prev,
-          endereco: place.formatted_address?.replace(', Brasil', '').replace(', RS', '') || prev.endereco,
+          endereco: routeComp ? routeComp.long_name : (place.formatted_address?.split(',')[0] || prev.endereco),
+          numero: streetNumberComp ? streetNumberComp.long_name : prev.numero,
           bairro: bairroComp?.long_name || prev.bairro,
         }));
       });
@@ -148,10 +153,21 @@ export default function PortariaPage() {
     if (!novoCliente.nome || !novoCliente.telefone) return;
     setCriandoCliente(true);
     try {
+      const enderecoCompleto = novoCliente.numero 
+        ? `${novoCliente.endereco}, ${novoCliente.numero}${novoCliente.complemento ? ' - ' + novoCliente.complemento : ''}`
+        : novoCliente.endereco;
+
+      const payload = {
+        nome: novoCliente.nome,
+        telefone: novoCliente.telefone,
+        endereco: enderecoCompleto,
+        bairro: novoCliente.bairro
+      };
+
       const res = await fetch(`${API_URL}/clientes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(novoCliente),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         const c = await res.json();
@@ -219,7 +235,7 @@ export default function PortariaPage() {
     setBusca('');
     setResultados([]);
     setShowNovoForm(false);
-    setNovoCliente({ nome: '', telefone: '', endereco: '', bairro: '' });
+    setNovoCliente({ nome: '', telefone: '', endereco: '', numero: '', complemento: '', bairro: '' });
     setNovoClienteCoords(null);
     autocompleteRef.current = null;
   }
@@ -369,35 +385,69 @@ export default function PortariaPage() {
                 />
               </div>
             ))}
-            <div>
-              <label style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>
-                Endereço {novoClienteCoords && <span style={{ color: 'var(--green)', marginLeft: 4 }}>✓ GPS</span>}
-              </label>
-              <input
-                ref={enderecoInputRef}
-                value={novoCliente.endereco}
-                onChange={e => { setNovoCliente(prev => ({ ...prev, endereco: e.target.value })); setNovoClienteCoords(null); }}
-                placeholder="Rua, número..."
-                style={{
-                  width: '100%', padding: '9px 12px', border: `1px solid ${novoClienteCoords ? 'var(--green)' : 'var(--border)'}`,
-                  borderRadius: 8, fontSize: 13, color: 'var(--text-primary)', background: 'var(--bg-surface-2)',
-                  outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
-                }}
-              />
+            <div style={{ display: 'flex', gap: 12 }}>
+              <div style={{ flex: 1.5 }}>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>
+                  Endereço {novoClienteCoords && <span style={{ color: 'var(--green)', marginLeft: 4 }}>✓ GPS</span>}
+                </label>
+                <input
+                  ref={enderecoInputRef}
+                  value={novoCliente.endereco}
+                  onChange={e => { setNovoCliente(prev => ({ ...prev, endereco: e.target.value })); setNovoClienteCoords(null); }}
+                  placeholder="Rua..."
+                  style={{
+                    width: '100%', padding: '9px 12px', border: `1px solid ${novoClienteCoords ? 'var(--green)' : 'var(--border)'}`,
+                    borderRadius: 8, fontSize: 13, color: 'var(--text-primary)', background: 'var(--bg-surface-2)',
+                    outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+              <div style={{ flex: 0.8 }}>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>
+                  Número
+                </label>
+                <input
+                  value={novoCliente.numero}
+                  onChange={e => setNovoCliente(prev => ({ ...prev, numero: e.target.value }))}
+                  placeholder="123, S/N"
+                  style={{
+                    width: '100%', padding: '9px 12px', border: '1px solid var(--border)',
+                    borderRadius: 8, fontSize: 13, color: 'var(--text-primary)', background: 'var(--bg-surface-2)',
+                    outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+                  }}
+                />
+              </div>
             </div>
-            <div>
-              <label style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>
-                Bairro
-              </label>
-              <input
-                value={novoCliente.bairro}
-                onChange={e => setNovoCliente(prev => ({ ...prev, bairro: e.target.value }))}
-                style={{
-                  width: '100%', padding: '9px 12px', border: '1px solid var(--border)',
-                  borderRadius: 8, fontSize: 13, color: 'var(--text-primary)', background: 'var(--bg-surface-2)',
-                  outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
-                }}
-              />
+            <div style={{ display: 'flex', gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>
+                  Complemento
+                </label>
+                <input
+                  value={novoCliente.complemento}
+                  onChange={e => setNovoCliente(prev => ({ ...prev, complemento: e.target.value }))}
+                  placeholder="Apto, Casa 2..."
+                  style={{
+                    width: '100%', padding: '9px 12px', border: '1px solid var(--border)',
+                    borderRadius: 8, fontSize: 13, color: 'var(--text-primary)', background: 'var(--bg-surface-2)',
+                    outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>
+                  Bairro
+                </label>
+                <input
+                  value={novoCliente.bairro}
+                  onChange={e => setNovoCliente(prev => ({ ...prev, bairro: e.target.value }))}
+                  style={{
+                    width: '100%', padding: '9px 12px', border: '1px solid var(--border)',
+                    borderRadius: 8, fontSize: 13, color: 'var(--text-primary)', background: 'var(--bg-surface-2)',
+                    outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+                  }}
+                />
+              </div>
             </div>
             <button
               onClick={criarNovoCliente}
