@@ -91,7 +91,12 @@ export default function PortariaPage() {
     loadGooglePlaces(() => {
       if (!enderecoInputRef.current || autocompleteRef.current) return;
       const ac = new (window as any).google.maps.places.Autocomplete(enderecoInputRef.current, {
-        componentRestrictions: { country: 'br' },
+        componentRestrictions: { country: ['br', 'uy'] },
+        bounds: new (window as any).google.maps.LatLngBounds(
+          new (window as any).google.maps.LatLng(-32.65, -53.45), // Sudoeste
+          new (window as any).google.maps.LatLng(-32.50, -53.30)  // Nordeste
+        ),
+        strictBounds: true,
         types: ['address'],
         fields: ['formatted_address', 'geometry', 'address_components'],
       });
