@@ -3,7 +3,9 @@ import { pool } from '../db';
 
 export async function produtosRoutes(server: FastifyInstance) {
   // GET /api/produtos
-  server.get('/', async (_request, reply) => {
+  server.get('/', async (request, reply) => {
+    const { all } = request.query as any;
+    const whereClause = all === 'true' ? '' : 'WHERE p.ativo = true';
     try {
       const { rows } = await pool.query(`
         SELECT p.id, p.nome, p.preco, p.unidade, p.ativo,
@@ -11,7 +13,7 @@ export async function produtosRoutes(server: FastifyInstance) {
           COALESCE(e.quantidade_minima, 5) AS quantidade_minima
         FROM public.telegas_produtos p
         LEFT JOIN public.telegas_estoque e ON e.produto_id = p.id
-        WHERE p.ativo = true
+        ${whereClause}
         ORDER BY p.nome
       `);
       return rows.map((r: any) => ({
@@ -71,6 +73,25 @@ export async function produtosRoutes(server: FastifyInstance) {
     } catch (err) {
       server.log.error(err);
       return reply.code(500).send({ error: 'Erro ao atualizar produto' });
+    }
+  });
+
+  // GET /api/produtos/:id/movimentos
+  server.get<{ Params: { id: string } }>('/:id/movimentos', async (request, reply) => {
+    const id = parseInt(request.params.id);
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, tipo, quantidade, observacao, created_at
+         FROM public.telegas_estoque_movimentos
+         WHERE produto_id = $1
+         ORDER BY created_at DESC
+         LIMIT 20`,
+        [id]
+      );
+      return rows;
+    } catch (err) {
+      server.log.error(err);
+      return reply.code(500).send({ error: 'Erro ao buscar movimentos' });
     }
   });
 

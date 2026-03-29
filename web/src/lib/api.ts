@@ -216,9 +216,26 @@ export const api = {
     return res.json();
   },
 
-  getProdutos: async () => {
-    const res = await fetch(`${API_URL}/produtos`, { cache: 'no-store' });
+  getProdutos: async (all?: boolean) => {
+    const q = all ? '?all=true' : '';
+    const res = await fetch(`${API_URL}/produtos${q}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch produtos');
+    return res.json();
+  },
+
+  atualizarProduto: async (id: number, data: { nome?: string; preco?: number; unidade?: string; quantidadeMinima?: number; ativo?: boolean }) => {
+    const res = await fetch(`${API_URL}/produtos/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Erro ao atualizar produto');
+    return res.json();
+  },
+
+  getMovimentosProduto: async (id: number) => {
+    const res = await fetch(`${API_URL}/produtos/${id}/movimentos`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Erro ao buscar movimentos');
     return res.json();
   },
 
