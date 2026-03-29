@@ -121,25 +121,20 @@ export default function PedidosPage() {
     if (!detail) return;
     setActionLoading(true); setActionError('');
     try {
-      const updated = await api.concluirPedido(detail.id);
-      setDetail(updated);
-      setHistory(h => [...h, { status: 'entregue', changed_at: new Date().toISOString() }]);
-      fetchPedidos();
-    } catch (e: any) { setActionError(e.message || 'Erro ao concluir'); }
-    finally { setActionLoading(false); }
+      await api.concluirPedido(detail.id);
+      closeDetail();
+      await fetchPedidos();
+    } catch (e: any) { setActionError(e.message || 'Erro ao concluir'); setActionLoading(false); }
   };
 
   const handleCancelar = async () => {
     if (!detail) return;
     setActionLoading(true); setActionError('');
     try {
-      const updated = await api.cancelarPedido(detail.id, motivoCancel || undefined);
-      setDetail(updated);
-      setHistory(h => [...h, { status: 'cancelado', changed_at: new Date().toISOString() }]);
-      setShowCancelModal(false); setMotivoCancel('');
-      fetchPedidos();
-    } catch (e: any) { setActionError(e.message || 'Erro ao cancelar'); }
-    finally { setActionLoading(false); }
+      await api.cancelarPedido(detail.id, motivoCancel || undefined);
+      closeDetail();
+      await fetchPedidos();
+    } catch (e: any) { setActionError(e.message || 'Erro ao cancelar'); setActionLoading(false); }
   };
 
   const toggleSort = (col: string) => {
