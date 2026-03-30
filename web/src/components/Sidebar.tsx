@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Flame, LayoutDashboard, Package, Users, Contact, HeartPulse, Map, BarChart2, ShoppingCart, Archive } from 'lucide-react';
+import { Flame, LayoutDashboard, Package, Users, Contact, HeartPulse, Map, BarChart2, ShoppingCart, Archive, CreditCard } from 'lucide-react';
 
 const nav = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -14,6 +14,7 @@ const nav = [
   { href: '/retencao', label: 'Retenção', icon: HeartPulse },
   { href: '/mapa', label: 'Mapa', icon: Map },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart2 },
+  { href: '/pagamentos', label: 'Pagamentos', icon: CreditCard },
 ];
 
 export default function Sidebar() {

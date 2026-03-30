@@ -275,6 +275,38 @@ export const api = {
     return res.json();
   },
 
+  getFormasPagamento: async () => {
+    const res = await fetch(`${API_URL}/formas-pagamento`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Erro ao buscar formas de pagamento');
+    return res.json();
+  },
+
+  criarFormaPagamento: async (data: { nome: string; slug: string; aceitaTroco: boolean; ativo: boolean; ordem: number }) => {
+    const res = await fetch(`${API_URL}/formas-pagamento`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as any).error || 'Erro ao criar'); }
+    return res.json();
+  },
+
+  atualizarFormaPagamento: async (id: number, data: Partial<{ nome: string; slug: string; aceitaTroco: boolean; ativo: boolean; ordem: number }>) => {
+    const res = await fetch(`${API_URL}/formas-pagamento/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as any).error || 'Erro ao atualizar'); }
+    return res.json();
+  },
+
+  excluirFormaPagamento: async (id: number) => {
+    const res = await fetch(`${API_URL}/formas-pagamento/${id}`, { method: 'DELETE' });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as any).error || 'Erro ao excluir'); }
+    return res.json();
+  },
+
   criarPedidoPortaria: async (data: {
     clienteId?: number;
     telefone: string;
