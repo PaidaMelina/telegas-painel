@@ -21,6 +21,7 @@ export async function produtosRoutes(server: FastifyInstance) {
         nome: r.nome,
         preco: parseFloat(r.preco),
         unidade: r.unidade,
+        ativo: r.ativo,
         quantidade: parseInt(r.quantidade),
         quantidadeMinima: parseInt(r.quantidade_minima),
         estoqueBaixo: parseInt(r.quantidade) <= parseInt(r.quantidade_minima),
