@@ -3,6 +3,7 @@ import { api } from '@/lib/api';
 import { Package, CheckCircle2, Truck, AlertTriangle, ArrowRight, TrendingUp, Clock, Users } from 'lucide-react';
 import Link from 'next/link';
 import ConversasPanel from '@/components/ConversasPanel';
+import AutoRefresh from '@/components/AutoRefresh';
 
 export const revalidate = 30;
 
@@ -124,6 +125,7 @@ export default async function DashboardPage() {
 
   return (
     <div style={{ display: 'flex', alignItems: 'stretch', width: '100%', minHeight: '100vh' }}>
+      <AutoRefresh intervalMs={30000} />
 
       {/* ── Left: Main Content ── */}
       <main className="relative z-10" style={{ flex: 1, minWidth: 0, padding: '32px 28px', overflowX: 'hidden' }}>
