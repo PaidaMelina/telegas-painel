@@ -120,29 +120,32 @@ export async function relatoriosRoutes(server: FastifyInstance) {
     const { periodo = 'hoje', de, ate } = request.query as any;
     const { current } = buildWhere(periodo, de, ate);
     try {
-      const { rows } = await pool.query(`
-        SELECT
-          COALESCE(item->>'produto', item->>'nome', 'Produto') AS produto,
-          SUM(COALESCE((item->>'qtd')::int, (item->>'quantidade')::int, 1))   AS qtd,
-          SUM(COALESCE((item->>'qtd')::int, (item->>'quantidade')::int, 1)
-              * COALESCE((item->>'preco')::numeric, (item->>'valor')::numeric, 0)) AS receita
-        FROM public.telegas_pedidos,
-             jsonb_array_elements(
-               CASE WHEN jsonb_typeof(produtos::jsonb) = 'array'
-                    THEN produtos::jsonb
-                    ELSE '[]'::jsonb
-               END
-             ) AS item
+      // Fetch raw rows first, then expand products in JS to avoid JSONB cast issues
+      const { rows: pedidos } = await pool.query(`
+        SELECT produtos::text AS produtos_raw
+        FROM public.telegas_pedidos
         WHERE ${current}
-        GROUP BY produto
-        ORDER BY qtd DESC
-        LIMIT 10
       `);
-      return rows.map((r: any) => ({
-        produto: r.produto,
-        qtd:     parseInt(r.qtd),
-        receita: parseFloat(r.receita),
-      }));
+
+      const counts: Record<string, { qtd: number; receita: number }> = {};
+      for (const row of pedidos) {
+        let items: any[] = [];
+        try { items = JSON.parse(row.produtos_raw); } catch { continue; }
+        if (!Array.isArray(items)) continue;
+        for (const item of items) {
+          const nome = item.produto || item.nome || 'Produto';
+          const qtd = parseInt(item.qtd ?? item.quantidade ?? 1);
+          const preco = parseFloat(item.preco ?? item.valor ?? 0);
+          if (!counts[nome]) counts[nome] = { qtd: 0, receita: 0 };
+          counts[nome].qtd += isNaN(qtd) ? 1 : qtd;
+          counts[nome].receita += isNaN(qtd) || isNaN(preco) ? 0 : qtd * preco;
+        }
+      }
+
+      return Object.entries(counts)
+        .sort((a, b) => b[1].qtd - a[1].qtd)
+        .slice(0, 10)
+        .map(([produto, v]) => ({ produto, qtd: v.qtd, receita: v.receita }));
     } catch (err) {
       server.log.error(err);
       return reply.code(500).send({ error: 'Erro ao buscar top produtos' });
@@ -152,6 +155,8 @@ export async function relatoriosRoutes(server: FastifyInstance) {
   server.get('/top-entregadores', async (request, reply) => {
     const { periodo = 'hoje', de, ate } = request.query as any;
     const { current } = buildWhere(periodo, de, ate);
+    // Qualify created_at with table alias to avoid ambiguity in JOIN
+    const pCurrent = current.replace(/\bcreated_at\b/g, 'p.created_at');
     try {
       const { rows } = await pool.query(`
         SELECT
@@ -166,7 +171,7 @@ export async function relatoriosRoutes(server: FastifyInstance) {
           ), 0)                                                         AS tempo_medio
         FROM public.telegas_pedidos p
         JOIN public.telegas_entregadores e ON e.id = p.entregador_id
-        WHERE ${current}
+        WHERE ${pCurrent}
         GROUP BY e.nome
         ORDER BY entregues DESC
         LIMIT 8
