@@ -2,19 +2,19 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333/api';
 
 export const api = {
   getDashboardSummary: async () => {
-    const res = await fetch(`${API_URL}/dashboard/summary`, { next: { revalidate: 30 } });
+    const res = await fetch(`${API_URL}/dashboard/summary`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch summary');
     return res.json();
   },
 
   getDashboardMetrics: async () => {
-    const res = await fetch(`${API_URL}/dashboard/metrics`, { next: { revalidate: 30 } });
+    const res = await fetch(`${API_URL}/dashboard/metrics`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch metrics');
     return res.json();
   },
 
   getDashboardStatusDistribution: async () => {
-    const res = await fetch(`${API_URL}/dashboard/status-distribution`, { next: { revalidate: 30 } });
+    const res = await fetch(`${API_URL}/dashboard/status-distribution`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch status distribution');
     return res.json();
   },
@@ -34,13 +34,13 @@ export const api = {
   },
 
   getDashboardProdutosHoje: async () => {
-    const res = await fetch(`${API_URL}/dashboard/produtos-hoje`, { next: { revalidate: 30 } });
+    const res = await fetch(`${API_URL}/dashboard/produtos-hoje`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch produtos hoje');
     return res.json();
   },
 
   getDashboardByEntregador: async () => {
-    const res = await fetch(`${API_URL}/dashboard/by-entregador`, { next: { revalidate: 30 } });
+    const res = await fetch(`${API_URL}/dashboard/by-entregador`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch by entregador');
     return res.json();
   },

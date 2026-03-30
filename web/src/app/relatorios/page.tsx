@@ -190,6 +190,7 @@ function Empty() {
 export default function RelatoriosPage() {
   const [periodo, setPeriodo]           = useState('7d');
   const [loading, setLoading]           = useState(true);
+  const [erro, setErro]                 = useState('');
   const [resumo, setResumo]             = useState<Resumo | null>(null);
   const [serie, setSerie]               = useState<Serie[]>([]);
   const [produtos, setProdutos]         = useState<Produto[]>([]);
@@ -198,21 +199,24 @@ export default function RelatoriosPage() {
   const [chartField, setChartField]     = useState<'receita' | 'pedidos'>('receita');
 
   const load = useCallback(async (p: string) => {
-    setLoading(true);
-    try {
-      const [r, s, prod, ent, bairro] = await Promise.all([
-        api.getRelatorioResumo(p),
-        api.getRelatorioSerie(p),
-        api.getRelatorioProdutos(p),
-        api.getRelatorioEntregadores(p),
-        api.getRelatorioBairros(p),
-      ]);
-      setResumo(r); setSerie(s); setProdutos(prod); setEntregadores(ent); setBairros(bairro);
-    } catch (_) {
-      setResumo(null);
-    } finally {
-      setLoading(false);
+    setLoading(true); setErro('');
+    const [r, s, prod, ent, bairro] = await Promise.allSettled([
+      api.getRelatorioResumo(p),
+      api.getRelatorioSerie(p),
+      api.getRelatorioProdutos(p),
+      api.getRelatorioEntregadores(p),
+      api.getRelatorioBairros(p),
+    ]);
+    const failed = [r, s, prod, ent, bairro].filter(x => x.status === 'rejected');
+    if (failed.length > 0) {
+      setErro(`Erro ao carregar ${failed.length} seção(ões). Verifique se o backend está acessível.`);
     }
+    setResumo(r.status === 'fulfilled' ? r.value : null);
+    setSerie(s.status === 'fulfilled' ? s.value : []);
+    setProdutos(prod.status === 'fulfilled' ? prod.value : []);
+    setEntregadores(ent.status === 'fulfilled' ? ent.value : []);
+    setBairros(bairro.status === 'fulfilled' ? bairro.value : []);
+    setLoading(false);
   }, []);
 
   useEffect(() => { load(periodo); }, [periodo, load]);
@@ -257,6 +261,12 @@ export default function RelatoriosPage() {
           ))}
         </div>
       </div>
+
+      {erro && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 8, border: '1px solid #fca5a5', background: '#fff1f1', color: '#991b1b', marginBottom: 20, fontSize: 13, fontFamily: 'var(--font-space-mono)' }}>
+          ⚠ {erro}
+        </div>
+      )}
 
       {/* KPIs row 1 */}
       <div className="rel-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 14 }}>

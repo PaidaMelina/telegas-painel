@@ -122,11 +122,17 @@ export async function relatoriosRoutes(server: FastifyInstance) {
     try {
       const { rows } = await pool.query(`
         SELECT
-          item->>'produto'                                              AS produto,
-          SUM((item->>'qtd')::int)                                     AS qtd,
-          SUM((item->>'qtd')::int * (item->>'preco')::numeric)         AS receita
+          COALESCE(item->>'produto', item->>'nome', 'Produto') AS produto,
+          SUM(COALESCE((item->>'qtd')::int, (item->>'quantidade')::int, 1))   AS qtd,
+          SUM(COALESCE((item->>'qtd')::int, (item->>'quantidade')::int, 1)
+              * COALESCE((item->>'preco')::numeric, (item->>'valor')::numeric, 0)) AS receita
         FROM public.telegas_pedidos,
-             jsonb_array_elements(produtos::jsonb) AS item
+             jsonb_array_elements(
+               CASE WHEN jsonb_typeof(produtos::jsonb) = 'array'
+                    THEN produtos::jsonb
+                    ELSE '[]'::jsonb
+               END
+             ) AS item
         WHERE ${current}
         GROUP BY produto
         ORDER BY qtd DESC

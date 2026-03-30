@@ -5,7 +5,7 @@ import Link from 'next/link';
 import ConversasPanel from '@/components/ConversasPanel';
 import AutoRefresh from '@/components/AutoRefresh';
 
-export const revalidate = 30;
+export const dynamic = 'force-dynamic';
 
 const STATUS_LABELS: Record<string, string> = {
   atribuido: 'Atribuído',
