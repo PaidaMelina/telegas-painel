@@ -116,6 +116,23 @@ export async function portariaRoutes(server: FastifyInstance) {
           headers: { apikey, 'Content-Type': 'application/json' },
           body: JSON.stringify({ number: numero, text: texto }),
         });
+
+        if (latVal && lngVal) {
+          await fetch(`${evolutionUrl}/message/sendLocation/${encodeURIComponent(instance)}`, {
+            method: 'POST',
+            headers: { apikey, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              number: numero,
+              options: { delay: 800 },
+              locationMessage: {
+                degreesLatitude: latVal,
+                degreesLongitude: lngVal,
+                name: `Pedido #${pedidoId}`,
+                address: `${endereco || ''}${bairro ? ', ' + bairro : ''}, Jaguarão - RS`,
+              },
+            }),
+          });
+        }
       } catch (e) {
         server.log.warn('Falha ao notificar entregador: ' + e);
       }
