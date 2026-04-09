@@ -1,33 +1,34 @@
 import fastify from 'fastify';
-import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import { setupRoutes } from './routes';
 
 const server = fastify({ logger: true });
 
-server.register(cors, {
-  origin: true,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-});
-
 const JWT_SECRET = process.env.JWT_SECRET || 'telegas-secret-key-change-in-production';
 server.register(jwt, { secret: JWT_SECRET });
 
-// Protege todas rotas /api/* exceto /api/auth/* e OPTIONS (preflight CORS)
+// CORS + Auth — tudo no mesmo hook, CORS headers sempre primeiro
 server.addHook('onRequest', async (request, reply) => {
-  // Preflight OPTIONS nunca precisa de auth — CORS responde por si só
-  if (request.method === 'OPTIONS') return;
+  const origin = request.headers.origin || '*';
+  reply.header('Access-Control-Allow-Origin', origin);
+  reply.header('Access-Control-Allow-Credentials', 'true');
+  reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
+  // Preflight — responde imediatamente com os headers acima
+  if (request.method === 'OPTIONS') {
+    return reply.status(204).send();
+  }
+
+  // Rotas públicas
   const url = request.url;
-  const isPublic =
+  if (
     url === '/api/health' ||
     url === '/api/version' ||
-    url.startsWith('/api/auth/');
+    url.startsWith('/api/auth/')
+  ) return;
 
-  if (isPublic) return;
-
+  // Todas as outras rotas exigem JWT
   try {
     await (request as any).jwtVerify();
   } catch {
