@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Flame, LayoutDashboard, Package, Users, Contact, HeartPulse, Map, BarChart2, ShoppingCart, Archive, CreditCard } from 'lucide-react';
+import { Flame, LayoutDashboard, Package, Users, Contact, HeartPulse, Map, BarChart2, ShoppingCart, Archive, CreditCard, LogOut } from 'lucide-react';
+import { auth } from '@/lib/api';
 
 const nav = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -37,6 +38,20 @@ export default function Sidebar() {
         <span className="sidebar-live-dot" />
         <span className="sidebar-live-label">Ao Vivo</span>
       </div>
+      <button
+        onClick={() => auth.logout()}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          width: '100%', background: 'none', border: 'none',
+          padding: '10px 16px', color: '#666', fontSize: 13,
+          cursor: 'pointer', borderTop: '1px solid #1a1a1a',
+        }}
+        onMouseOver={e => (e.currentTarget.style.color = '#aaa')}
+        onMouseOut={e => (e.currentTarget.style.color = '#666')}
+      >
+        <LogOut size={14} strokeWidth={1.5} />
+        <span>Sair</span>
+      </button>
     </aside>
   );
 }

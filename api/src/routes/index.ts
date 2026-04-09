@@ -8,6 +8,7 @@ import { conversasRoutes } from './conversas';
 import { produtosRoutes } from './produtos';
 import { portariaRoutes } from './portaria';
 import { formasPagamentoRoutes } from './formas-pagamento';
+import { authRoutes } from './auth';
 import { pool } from '../db';
 
 export async function setupRoutes(server: FastifyInstance) {
@@ -46,4 +47,5 @@ export async function setupRoutes(server: FastifyInstance) {
   server.register(produtosRoutes, { prefix: '/api/produtos' });
   server.register(portariaRoutes, { prefix: '/api/portaria' });
   server.register(formasPagamentoRoutes, { prefix: '/api/formas-pagamento' });
+  server.register(authRoutes, { prefix: '/api/auth' });
 }

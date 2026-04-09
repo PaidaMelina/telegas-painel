@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Sora, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
-import PainelEntregas from "@/components/PainelEntregas";
+import AuthGuard from "@/components/AuthGuard";
 
 const sora = Sora({
   variable: "--font-barlow",
@@ -32,11 +31,7 @@ export default function RootLayout({
       className={`${sora.variable} ${jetbrainsMono.variable} h-full`}
     >
       <body className="min-h-full" style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch' }}>
-        <Sidebar />
-        <div style={{ flex: 1, minWidth: 0, overflowX: 'hidden' }}>
-          {children}
-        </div>
-        <PainelEntregas />
+        <AuthGuard>{children}</AuthGuard>
       </body>
     </html>
   );
