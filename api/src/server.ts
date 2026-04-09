@@ -15,8 +15,11 @@ server.register(cors, {
 const JWT_SECRET = process.env.JWT_SECRET || 'telegas-secret-key-change-in-production';
 server.register(jwt, { secret: JWT_SECRET });
 
-// Protege todas rotas /api/* exceto /api/auth/*
+// Protege todas rotas /api/* exceto /api/auth/* e OPTIONS (preflight CORS)
 server.addHook('onRequest', async (request, reply) => {
+  // Preflight OPTIONS nunca precisa de auth — CORS responde por si só
+  if (request.method === 'OPTIONS') return;
+
   const url = request.url;
   const isPublic =
     url === '/api/health' ||
