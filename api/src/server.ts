@@ -26,7 +26,8 @@ server.addHook('onRequest', async (request, reply) => {
     url === '/api/health' ||
     url === '/api/version' ||
     url.startsWith('/api/auth/') ||
-    url.startsWith('/api/produtos')
+    url.startsWith('/api/produtos') ||
+    url.startsWith('/api/formas-pagamento')
   ) return;
 
   // Todas as outras rotas exigem JWT
