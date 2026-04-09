@@ -353,9 +353,72 @@ export const api = {
     return res.json();
   },
 
+  definirSenhaEntregador: async (id: number, senha: string) => {
+    const res = await fetchAuth(`${API_URL}/entregadores/${id}/senha`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ senha }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as any).error || 'Erro ao definir senha');
+    }
+    return res.json();
+  },
+
   excluirFormaPagamento: async (id: number) => {
     const res = await fetchAuth(`${API_URL}/formas-pagamento/${id}`, { method: 'DELETE' });
     if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as any).error || 'Erro ao excluir'); }
+    return res.json();
+  },
+
+  // --- Entregador App ---
+  entregadorLogin: async (telefone: string, senha: string) => {
+    const res = await fetch(`${API_URL}/entregador/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telefone, senha }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as any).error || 'Erro ao fazer login');
+    }
+    return res.json();
+  },
+
+  getMeusPedidos: async (token: string) => {
+    const res = await fetch(`${API_URL}/entregador/meus-pedidos`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    });
+    if (!res.ok) throw new Error('Failed to fetch pedidos');
+    return res.json();
+  },
+
+  aceitarPedido: async (id: number, token: string) => {
+    const res = await fetch(`${API_URL}/entregador/pedidos/${id}/aceitar`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as any).error || 'Erro'); }
+    return res.json();
+  },
+
+  entregarPedido: async (id: number, token: string) => {
+    const res = await fetch(`${API_URL}/entregador/pedidos/${id}/entregar`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as any).error || 'Erro'); }
+    return res.json();
+  },
+
+  recusarPedido: async (id: number, token: string) => {
+    const res = await fetch(`${API_URL}/entregador/pedidos/${id}/recusar`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as any).error || 'Erro'); }
     return res.json();
   },
 

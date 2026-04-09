@@ -9,6 +9,7 @@ import { produtosRoutes } from './produtos';
 import { portariaRoutes } from './portaria';
 import { formasPagamentoRoutes } from './formas-pagamento';
 import { authRoutes } from './auth';
+import { entregadorRoutes, definirSenhaEntregador } from './entregador';
 import { pool } from '../db';
 
 export async function setupRoutes(server: FastifyInstance) {
@@ -48,4 +49,6 @@ export async function setupRoutes(server: FastifyInstance) {
   server.register(portariaRoutes, { prefix: '/api/portaria' });
   server.register(formasPagamentoRoutes, { prefix: '/api/formas-pagamento' });
   server.register(authRoutes, { prefix: '/api/auth' });
+  server.register(entregadorRoutes, { prefix: '/api/entregador' });
+  server.register(definirSenhaEntregador, { prefix: '/api/entregadores' });
 }

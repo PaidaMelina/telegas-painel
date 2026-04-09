@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
-import { Users, CheckCircle2, Truck, Plus, Pencil, Trash2, Coffee, X } from 'lucide-react';
+import { Users, CheckCircle2, Truck, Plus, Pencil, Trash2, Coffee, X, KeyRound } from 'lucide-react';
 
 interface Entregador {
   id: number;
@@ -35,6 +35,12 @@ export default function EntregadoresPage() {
   // Delete confirm
   const [deleteTarget, setDeleteTarget] = useState<Entregador | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Senha modal
+  const [senhaTarget, setSenhaTarget] = useState<Entregador | null>(null);
+  const [senhaValue, setSenhaValue] = useState('');
+  const [savingSenha, setSavingSenha] = useState(false);
+  const [senhaError, setSenhaError] = useState('');
 
   const reload = () =>
     api.getEntregadores().then(setEntregadores).catch(console.error);
@@ -97,6 +103,21 @@ export default function EntregadoresPage() {
       reload();
     } catch (err) {
       console.error(err);
+    }
+  }
+
+  async function handleSenha() {
+    if (!senhaTarget) return;
+    setSavingSenha(true);
+    setSenhaError('');
+    try {
+      await api.definirSenhaEntregador(senhaTarget.id, senhaValue);
+      setSenhaTarget(null);
+      setSenhaValue('');
+    } catch (err: any) {
+      setSenhaError(err.message || 'Erro ao definir senha');
+    } finally {
+      setSavingSenha(false);
     }
   }
 
@@ -299,6 +320,13 @@ export default function EntregadoresPage() {
                   }}>
                     <Pencil size={11} strokeWidth={2} /> Editar
                   </button>
+                  <button onClick={() => { setSenhaTarget(e); setSenhaValue(''); setSenhaError(''); }} style={{
+                    padding: '7px 10px', borderRadius: '4px', cursor: 'pointer',
+                    border: '1px solid #bfdbfe', background: '#eff6ff',
+                    color: '#1d4ed8', transition: 'all 0.15s', display: 'flex', alignItems: 'center',
+                  }} title="Definir senha">
+                    <KeyRound size={12} strokeWidth={2} />
+                  </button>
                   <button onClick={() => setDeleteTarget(e)} style={{
                     padding: '7px 12px', borderRadius: '4px', cursor: 'pointer',
                     border: '1px solid #fecaca', background: '#fff1f1',
@@ -321,9 +349,9 @@ export default function EntregadoresPage() {
       </footer>
 
       {/* ── Backdrop ── */}
-      {(drawerOpen || deleteTarget) && (
+      {(drawerOpen || deleteTarget || senhaTarget) && (
         <div
-          onClick={() => { setDrawerOpen(false); setDeleteTarget(null); }}
+          onClick={() => { setDrawerOpen(false); setDeleteTarget(null); setSenhaTarget(null); }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(13,20,36,0.45)', zIndex: 40, backdropFilter: 'blur(2px)' }}
         />
       )}
@@ -401,6 +429,56 @@ export default function EntregadoresPage() {
               transition: 'background 0.15s',
             }}>
               {saving ? 'Salvando...' : editTarget ? 'Salvar' : 'Criar'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Senha Modal ── */}
+      {senhaTarget && (
+        <div style={{
+          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+          background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '10px',
+          zIndex: 50, padding: '28px 28px 24px', width: '360px',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+        }}>
+          <h3 style={{ fontSize: '15px', fontWeight: 800, fontFamily: 'var(--font-barlow)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
+            Definir senha
+          </h3>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginBottom: '18px' }}>
+            {senhaTarget.nome}
+          </p>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={labelStyle}>Nova senha</label>
+            <input
+              type="password"
+              style={inputStyle}
+              value={senhaValue}
+              onChange={e => setSenhaValue(e.target.value)}
+              placeholder="Mínimo 4 caracteres"
+              autoFocus
+            />
+          </div>
+          {senhaError && (
+            <p style={{ fontSize: '12px', color: '#c81e1e', fontFamily: 'var(--font-space-mono)', background: '#fff1f1', padding: '10px 12px', borderRadius: '4px', border: '1px solid #fecaca', marginBottom: '12px' }}>
+              {senhaError}
+            </p>
+          )}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={() => setSenhaTarget(null)} style={{
+              flex: 1, padding: '10px', borderRadius: '6px', cursor: 'pointer',
+              border: '1px solid var(--border)', background: 'var(--bg-surface)',
+              color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 700,
+              fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase',
+            }}>
+              Cancelar
+            </button>
+            <button onClick={handleSenha} disabled={savingSenha || senhaValue.length < 4} style={{
+              flex: 1, padding: '10px', borderRadius: '6px', cursor: savingSenha || senhaValue.length < 4 ? 'not-allowed' : 'pointer',
+              border: 'none', background: savingSenha || senhaValue.length < 4 ? '#93c5fd' : 'var(--accent)', color: '#fff',
+              fontSize: '11px', fontWeight: 700, fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase',
+            }}>
+              {savingSenha ? 'Salvando...' : 'Salvar'}
             </button>
           </div>
         </div>
