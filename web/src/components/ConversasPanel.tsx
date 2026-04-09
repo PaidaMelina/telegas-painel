@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { MessageCircle, Bot, User, RefreshCw, Clock } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333/api';
+import { api } from '@/lib/api';
 const POLL_INTERVAL = 15000; // 15 seconds
 
 interface Mensagem {
@@ -43,8 +43,8 @@ function ConversaDetail({ conversa, onClose }: { conversa: Conversa; onClose: ()
 
   const fetchMsgs = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/conversas/${encodeURIComponent(conversa.sessionId)}`, { cache: 'no-store' });
-      if (res.ok) setMsgs(await res.json());
+      const msgs = await api.getConversaMensagens(conversa.sessionId);
+      setMsgs(msgs);
     } catch {}
     setLoading(false);
   }, [conversa.sessionId]);
@@ -134,11 +134,9 @@ export default function ConversasPanel() {
 
   const fetchConversas = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/conversas/ativas`, { cache: 'no-store' });
-      if (res.ok) {
-        setConversas(await res.json());
-        setLastUpdate(new Date());
-      }
+      const data = await api.getConversasAtivas();
+      setConversas(data);
+      setLastUpdate(new Date());
     } catch {}
     setLoading(false);
   }, []);

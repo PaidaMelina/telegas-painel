@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Bike, CheckCircle, XCircle, MapPin, User, Clock, X } from 'lucide-react';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333/api';
+import { api } from '@/lib/api';
 
 type Pedido = {
   id: number;
@@ -37,8 +36,8 @@ export default function PainelEntregas() {
 
   const fetchAtivos = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/pedidos/ativos`, { cache: 'no-store' });
-      if (res.ok) setPedidos(await res.json());
+      const data = await api.getPedidosAtivos();
+      setPedidos(data);
     } catch {}
   }, []);
 
@@ -55,7 +54,7 @@ export default function PainelEntregas() {
   async function concluir(id: number) {
     setActionLoading(id);
     try {
-      await fetch(`${API_URL}/pedidos/${id}/concluir`, { method: 'POST' });
+      await api.concluirPedido(id);
       await fetchAtivos();
     } finally {
       setActionLoading(null);
@@ -65,11 +64,7 @@ export default function PainelEntregas() {
   async function cancelar(id: number) {
     setActionLoading(id);
     try {
-      await fetch(`${API_URL}/pedidos/${id}/cancelar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ motivo: 'Cancelado pelo operador' }),
-      });
+      await api.cancelarPedido(id, 'Cancelado pelo operador');
       await fetchAtivos();
     } finally {
       setActionLoading(null);

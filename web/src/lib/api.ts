@@ -91,6 +91,12 @@ export const api = {
     return res.json();
   },
 
+  getPedidosAtivos: async () => {
+    const res = await fetchAuth(`${API_URL}/pedidos/ativos`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch pedidos ativos');
+    return res.json();
+  },
+
   getPedidos: async (params?: Record<string, string>) => {
     const query = new URLSearchParams(params).toString();
     const res = await fetchAuth(`${API_URL}/pedidos?${query}`, { cache: 'no-store' });
