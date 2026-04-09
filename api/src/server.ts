@@ -6,8 +6,10 @@ import { setupRoutes } from './routes';
 const server = fastify({ logger: true });
 
 server.register(cors, {
-  origin: '*',
+  origin: true,
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'telegas-secret-key-change-in-production';
