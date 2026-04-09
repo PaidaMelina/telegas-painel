@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333/api';
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333/api';
 
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -35,10 +35,12 @@ export const auth = {
     }
     const data = await res.json();
     localStorage.setItem('telegas_token', data.token);
+    document.cookie = `telegas_token=${data.token}; path=/; max-age=86400; SameSite=Lax`;
     return data;
   },
   logout: () => {
     localStorage.removeItem('telegas_token');
+    document.cookie = 'telegas_token=; path=/; max-age=0';
     window.location.href = '/login';
   },
   isAuthenticated: () => !!getToken(),

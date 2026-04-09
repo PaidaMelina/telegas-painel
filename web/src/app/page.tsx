@@ -1,11 +1,21 @@
 import React from 'react';
-import { api } from '@/lib/api';
+import { API_URL } from '@/lib/api';
+import { cookies } from 'next/headers';
 import { Package, CheckCircle2, Truck, AlertTriangle, ArrowRight, TrendingUp, Clock, Users } from 'lucide-react';
 import Link from 'next/link';
 import ConversasPanel from '@/components/ConversasPanel';
 import AutoRefresh from '@/components/AutoRefresh';
 
 export const dynamic = 'force-dynamic';
+
+async function serverFetch(path: string, token: string | undefined) {
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
 
 const STATUS_LABELS: Record<string, string> = {
   atribuido: 'Atribuído',
@@ -70,6 +80,9 @@ interface ProdutoStat { qtd: number; receita: number; }
 interface ProdutosHoje { gasAzul: ProdutoStat; gasNacional: ProdutoStat; agua: ProdutoStat; outros: ProdutoStat; }
 
 export default async function DashboardPage() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('telegas_token')?.value;
+
   let summary = { hoje: { total: 0, entregues: 0 }, emAberto: 0 };
   let pedidos: Pedido[] = [];
   let metrics = { ticketMedio: 0, tempoMedioEntrega: 0, pedidosAtrasados: 0 };
@@ -82,13 +95,13 @@ export default async function DashboardPage() {
 
   const [summaryResult, pedidosResult, metricsResult, statusDistResult, byBairroResult, byEntregadorResult, produtosResult] =
     await Promise.allSettled([
-      api.getDashboardSummary(),
-      api.getPedidos({ limit: '20' }),
-      api.getDashboardMetrics(),
-      api.getDashboardStatusDistribution(),
-      api.getDashboardByBairro(),
-      api.getDashboardByEntregador(),
-      api.getDashboardProdutosHoje(),
+      serverFetch('/dashboard/summary', token),
+      serverFetch('/pedidos?limit=20', token),
+      serverFetch('/dashboard/metrics', token),
+      serverFetch('/dashboard/status-distribution', token),
+      serverFetch('/dashboard/by-bairro', token),
+      serverFetch('/dashboard/by-entregador', token),
+      serverFetch('/dashboard/produtos-hoje', token),
     ]);
 
   if (summaryResult.status === 'fulfilled') {
