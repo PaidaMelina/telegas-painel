@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, UserPlus, X, Plus, Minus, ShoppingCart, CheckCircle, ChevronRight, Package } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333/api';
+import { API_URL, api } from '@/lib/api';
 const GMAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
 function loadGooglePlaces(callback: () => void) {
@@ -79,8 +79,7 @@ export default function PortariaPage() {
   const [entregadorNome, setEntregadorNome] = useState('');
 
   useEffect(() => {
-    fetch(`${API_URL}/produtos`, { cache: 'no-store' })
-      .then(r => r.json())
+    api.getProdutos()
       .then(setProdutos)
       .catch(() => {});
   }, []);
@@ -128,8 +127,7 @@ export default function PortariaPage() {
   const buscarClientes = useCallback((q: string) => {
     if (q.length < 2) { setResultados([]); return; }
     setBuscando(true);
-    fetch(`${API_URL}/clientes?search=${encodeURIComponent(q)}&limit=6`, { cache: 'no-store' })
-      .then(r => r.json())
+    api.getClientes({ search: q, limit: '6' })
       .then(d => setResultados(d.data || []))
       .catch(() => setResultados([]))
       .finally(() => setBuscando(false));
@@ -164,15 +162,8 @@ export default function PortariaPage() {
         bairro: novoCliente.bairro
       };
 
-      const res = await fetch(`${API_URL}/clientes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const c = await res.json();
-        selecionarCliente(c);
-      }
+      const c = await api.criarCliente(payload);
+      selecionarCliente(c);
     } finally {
       setCriandoCliente(false);
     }
@@ -198,28 +189,19 @@ export default function PortariaPage() {
     if (!clienteSelecionado || !itens.length) return;
     setSubmetendo(true);
     try {
-      const res = await fetch(`${API_URL}/portaria/pedido`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clienteId: clienteSelecionado.id,
-          telefone: clienteSelecionado.telefone,
-          nome: clienteSelecionado.nome,
-          endereco: clienteSelecionado.endereco,
-          bairro: clienteSelecionado.bairro,
-          produtos: itens.map(i => ({ id: i.produto.id, nome: i.produto.nome, qtd: i.qtd, preco: i.produto.preco })),
-          formaPagamento: pagamento.toLowerCase(),
-          trocoPara: pagamento === 'Dinheiro' && troco ? parseFloat(troco) : null,
-          lat: novoClienteCoords?.lat ?? null,
-          lng: novoClienteCoords?.lng ?? null,
-        }),
+      const d = await api.criarPedidoPortaria({
+        clienteId: clienteSelecionado.id,
+        telefone: clienteSelecionado.telefone,
+        nome: clienteSelecionado.nome,
+        endereco: clienteSelecionado.endereco,
+        bairro: clienteSelecionado.bairro,
+        produtos: itens.map(i => ({ id: i.produto.id, nome: i.produto.nome, qtd: i.qtd, preco: i.produto.preco })),
+        formaPagamento: pagamento.toLowerCase(),
+        trocoPara: pagamento === 'Dinheiro' && troco ? parseFloat(troco) : null,
       });
-      if (res.ok) {
-        const d = await res.json();
-        setPedidoId(d.pedidoId);
-        setEntregadorNome(d.entregador);
-        setStep('sucesso');
-      }
+      setPedidoId(d.pedidoId);
+      setEntregadorNome(d.entregador);
+      setStep('sucesso');
     } finally {
       setSubmetendo(false);
     }
