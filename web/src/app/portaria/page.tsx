@@ -78,11 +78,23 @@ export default function PortariaPage() {
   const [pedidoId, setPedidoId] = useState<number | null>(null);
   const [entregadorNome, setEntregadorNome] = useState('');
 
+  // Entregadores disponíveis
+  const [entregadoresDisponiveis, setEntregadoresDisponiveis] = useState<{ id: number; nome: string; pedidosAtivos: number }[]>([]);
+  const [entregadorSelecionado, setEntregadorSelecionado] = useState<number | null>(null); // null = automático
+
   useEffect(() => {
     api.getProdutos()
       .then(setProdutos)
       .catch(() => {});
   }, []);
+
+  // Buscar entregadores ao entrar na tela de pedido
+  useEffect(() => {
+    if (step !== 'pedido') return;
+    api.getEntregadoresDisponiveis()
+      .then(setEntregadoresDisponiveis)
+      .catch(() => {});
+  }, [step]);
 
   // Google Places Autocomplete no campo endereço
   useEffect(() => {
@@ -198,6 +210,7 @@ export default function PortariaPage() {
         produtos: itens.map(i => ({ id: i.produto.id, nome: i.produto.nome, qtd: i.qtd, preco: i.produto.preco })),
         formaPagamento: pagamento.toLowerCase(),
         trocoPara: pagamento === 'Dinheiro' && troco ? parseFloat(troco) : null,
+        entregadorId: entregadorSelecionado,
       });
       setPedidoId(d.pedidoId);
       setEntregadorNome(d.entregador);
@@ -220,6 +233,8 @@ export default function PortariaPage() {
     setNovoCliente({ nome: '', telefone: '', endereco: '', numero: '', complemento: '', bairro: '' });
     setNovoClienteCoords(null);
     autocompleteRef.current = null;
+    setEntregadorSelecionado(null);
+    setEntregadoresDisponiveis([]);
   }
 
   // ─── Tela de sucesso ───────────────────────────────────
@@ -255,7 +270,7 @@ export default function PortariaPage() {
         <ShoppingCart size={18} style={{ color: 'var(--accent)' }} strokeWidth={1.5} />
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Portaria</h1>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>Pedido manual com atribuição automática de entregador</p>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>Pedido manual com seleção de entregador</p>
         </div>
         {step === 'pedido' && clienteSelecionado && (
           <button
@@ -592,6 +607,50 @@ export default function PortariaPage() {
                 />
               </div>
             )}
+
+            {/* Entregador */}
+            <div>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 8px', fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Entregador</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <button
+                  onClick={() => setEntregadorSelecionado(null)}
+                  style={{
+                    width: '100%', padding: '8px 12px', textAlign: 'left',
+                    border: `1px solid ${entregadorSelecionado === null ? 'var(--accent)' : 'var(--border)'}`,
+                    borderRadius: 7, background: entregadorSelecionado === null ? 'var(--accent-dim)' : 'var(--bg-surface-2)',
+                    color: entregadorSelecionado === null ? 'var(--accent)' : 'var(--text-secondary)',
+                    fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-space-mono)',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  ⚡ Automático (menor carga)
+                </button>
+                {entregadoresDisponiveis.map(e => (
+                  <button
+                    key={e.id}
+                    onClick={() => setEntregadorSelecionado(e.id)}
+                    style={{
+                      width: '100%', padding: '8px 12px', textAlign: 'left',
+                      border: `1px solid ${entregadorSelecionado === e.id ? 'var(--accent)' : 'var(--border)'}`,
+                      borderRadius: 7, background: entregadorSelecionado === e.id ? 'var(--accent-dim)' : 'var(--bg-surface-2)',
+                      color: entregadorSelecionado === e.id ? 'var(--accent)' : 'var(--text-secondary)',
+                      fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    }}
+                  >
+                    <span>🛵 {e.nome}</span>
+                    <span style={{ fontSize: 10, fontFamily: 'var(--font-space-mono)', opacity: 0.7 }}>
+                      {e.pedidosAtivos} ativo{e.pedidosAtivos !== 1 ? 's' : ''}
+                    </span>
+                  </button>
+                ))}
+                {entregadoresDisponiveis.length === 0 && (
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', margin: 0 }}>
+                    Nenhum disponível — será atribuído automaticamente
+                  </p>
+                )}
+              </div>
+            </div>
 
             <button
               onClick={confirmarPedido}

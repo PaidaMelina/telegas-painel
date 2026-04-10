@@ -422,6 +422,12 @@ export const api = {
     return res.json();
   },
 
+  getEntregadoresDisponiveis: async () => {
+    const res = await fetchAuth(`${API_URL}/portaria/entregadores-disponiveis`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Erro ao buscar entregadores');
+    return res.json();
+  },
+
   criarPedidoPortaria: async (data: {
     clienteId?: number;
     telefone: string;
@@ -431,6 +437,7 @@ export const api = {
     produtos: { id: number; nome: string; qtd: number; preco: number }[];
     formaPagamento: string;
     trocoPara?: number | null;
+    entregadorId?: number | null;
   }) => {
     const res = await fetchAuth(`${API_URL}/portaria/pedido`, {
       method: 'POST',

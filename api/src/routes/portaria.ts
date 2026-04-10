@@ -2,6 +2,29 @@ import { FastifyInstance } from 'fastify';
 import { pool } from '../db';
 
 export async function portariaRoutes(server: FastifyInstance) {
+  // GET /api/portaria/entregadores-disponiveis
+  server.get('/entregadores-disponiveis', async (_request, reply) => {
+    try {
+      const { rows } = await pool.query(`
+        SELECT e.id, e.nome,
+          COUNT(p.id) FILTER (WHERE p.status IN ('atribuido','saiu_para_entrega')) AS pedidos_ativos
+        FROM public.telegas_entregadores e
+        LEFT JOIN public.telegas_pedidos p ON p.entregador_id = e.id
+        WHERE e.ativo = true AND e.em_folga = false
+        GROUP BY e.id
+        ORDER BY pedidos_ativos ASC, e.nome
+      `);
+      return rows.map((r: any) => ({
+        id: r.id,
+        nome: r.nome,
+        pedidosAtivos: parseInt(r.pedidos_ativos, 10) || 0,
+      }));
+    } catch (err) {
+      server.log.error(err);
+      return reply.code(500).send({ error: 'Erro ao buscar entregadores' });
+    }
+  });
+
   // POST /api/portaria/pedido
   server.post('/pedido', async (request, reply) => {
     const {
@@ -15,6 +38,7 @@ export async function portariaRoutes(server: FastifyInstance) {
       trocoPara,
       lat,
       lng,
+      entregadorId,
     } = request.body as any;
 
     try {
@@ -41,23 +65,29 @@ export async function portariaRoutes(server: FastifyInstance) {
         total += (p.qtd || 1) * (p.preco || 0);
       }
 
-      // Find best delivery person
-      const { rows: entregadores } = await pool.query(`
-        SELECT e.id, e.nome, e.telefone,
-          COUNT(p.id) FILTER (WHERE p.status IN ('atribuido','em_entrega')) AS entregas_ativas
-        FROM public.telegas_entregadores e
-        LEFT JOIN public.telegas_pedidos p ON p.entregador_id = e.id
-        WHERE e.ativo = true AND e.em_folga = false
-        GROUP BY e.id
-        ORDER BY entregas_ativas ASC, RANDOM()
-        LIMIT 1
-      `);
-
-      if (!entregadores.length) {
-        return reply.code(400).send({ error: 'Nenhum entregador disponível' });
+      // Find delivery person — manual selection or auto (least busy)
+      let entregador: any;
+      if (entregadorId) {
+        const { rows } = await pool.query(
+          `SELECT id, nome, telefone FROM public.telegas_entregadores WHERE id = $1 AND ativo = true`,
+          [parseInt(entregadorId)]
+        );
+        if (!rows.length) return reply.code(400).send({ error: 'Entregador não encontrado' });
+        entregador = rows[0];
+      } else {
+        const { rows: entregadores } = await pool.query(`
+          SELECT e.id, e.nome, e.telefone,
+            COUNT(p.id) FILTER (WHERE p.status IN ('atribuido','saiu_para_entrega')) AS entregas_ativas
+          FROM public.telegas_entregadores e
+          LEFT JOIN public.telegas_pedidos p ON p.entregador_id = e.id
+          WHERE e.ativo = true AND e.em_folga = false
+          GROUP BY e.id
+          ORDER BY entregas_ativas ASC, RANDOM()
+          LIMIT 1
+        `);
+        if (!entregadores.length) return reply.code(400).send({ error: 'Nenhum entregador disponível' });
+        entregador = entregadores[0];
       }
-
-      const entregador = entregadores[0];
 
       // Create order
       const produtosJson = JSON.stringify(
