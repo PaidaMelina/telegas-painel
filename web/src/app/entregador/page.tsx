@@ -673,12 +673,30 @@ export default function EntregadorPage() {
   const [loadingAction, setLoadingAction] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [installed, setInstalled] = useState(false);
 
   // Register service worker
   useEffect(() => {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
+  }, []);
+
+  // Capture install prompt
+  useEffect(() => {
+    // Already installed (running standalone)
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setInstalled(true);
+      return;
+    }
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler as any);
+    window.addEventListener('appinstalled', () => { setInstalled(true); setInstallPrompt(null); });
+    return () => window.removeEventListener('beforeinstallprompt', handler as any);
   }, []);
 
   // Restore session from localStorage
@@ -771,8 +789,50 @@ export default function EntregadorPage() {
     }
   }
 
+  async function handleInstall() {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') { setInstalled(true); setInstallPrompt(null); }
+  }
+
   if (!token) {
-    return <LoginScreen onLogin={handleLogin} />;
+    return (
+      <>
+        <LoginScreen onLogin={handleLogin} />
+        {installPrompt && !installed && (
+          <div style={{
+            position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+            zIndex: 999, width: 'calc(100% - 48px)', maxWidth: 380,
+          }}>
+            <button onClick={handleInstall} style={{
+              width: '100%', padding: '14px 20px',
+              background: 'linear-gradient(135deg, #0d1a12, #0f2018)',
+              border: '1px solid rgba(34,197,94,0.3)',
+              borderRadius: 14, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 12,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(34,197,94,0.1)',
+            }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: 10,
+                background: '#22c55e',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 20, flexShrink: 0,
+              }}>🛵</div>
+              <div style={{ textAlign: 'left', flex: 1 }}>
+                <div style={{ color: '#e6edf3', fontWeight: 700, fontSize: 14, fontFamily: F.outfit }}>
+                  Instalar TeleGás
+                </div>
+                <div style={{ color: '#4b5563', fontSize: 11, fontFamily: F.mono, marginTop: 2 }}>
+                  Adicionar à tela inicial
+                </div>
+              </div>
+              <div style={{ color: '#22c55e', fontSize: 18 }}>↓</div>
+            </button>
+          </div>
+        )}
+      </>
+    );
   }
 
   const emRota = pedidos.filter(p => p.status === 'saiu_para_entrega').length;
@@ -878,6 +938,35 @@ export default function EntregadorPage() {
           </button>
         </div>
       </div>
+
+      {/* Install banner */}
+      {installPrompt && !installed && (
+        <div style={{
+          padding: '10px 16px',
+          background: 'linear-gradient(135deg, rgba(34,197,94,0.08), rgba(34,197,94,0.04))',
+          borderBottom: '1px solid rgba(34,197,94,0.15)',
+          display: 'flex', alignItems: 'center', gap: 12,
+        }}>
+          <span style={{ fontSize: 20 }}>📲</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ color: '#e6edf3', fontSize: 13, fontWeight: 600, fontFamily: F.outfit }}>
+              Instalar como app
+            </div>
+            <div style={{ color: '#4b5563', fontSize: 11, fontFamily: F.mono }}>
+              Receba notificações de pedidos
+            </div>
+          </div>
+          <button onClick={handleInstall} style={{
+            padding: '8px 16px',
+            background: '#22c55e',
+            border: 'none', borderRadius: 8,
+            color: '#fff', fontSize: 12, fontWeight: 700,
+            fontFamily: F.outfit, cursor: 'pointer',
+          }}>
+            Instalar
+          </button>
+        </div>
+      )}
 
       {/* Stats bar (only when there are orders) */}
       {pedidos.length > 0 && (
