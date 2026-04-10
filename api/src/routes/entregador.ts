@@ -1,12 +1,40 @@
 import { FastifyInstance } from 'fastify';
 import { pool } from '../db';
+import { getVapidPublicKey, sendPush } from '../push';
 
 export async function entregadorRoutes(server: FastifyInstance) {
-  // Ensure senha_hash column exists
-  await pool.query(`
-    ALTER TABLE public.telegas_entregadores
-    ADD COLUMN IF NOT EXISTS senha_hash TEXT
-  `).catch(() => {});
+  // Ensure columns exist
+  await pool.query(`ALTER TABLE public.telegas_entregadores ADD COLUMN IF NOT EXISTS senha_hash TEXT`).catch(() => {});
+  await pool.query(`ALTER TABLE public.telegas_entregadores ADD COLUMN IF NOT EXISTS push_subscription JSONB`).catch(() => {});
+
+  // GET /api/entregador/vapid-key  (public)
+  server.get('/vapid-key', async (_request, reply) => {
+    const key = getVapidPublicKey();
+    if (!key) return reply.code(503).send({ error: 'Push não configurado' });
+    return { publicKey: key };
+  });
+
+  // POST /api/entregador/push-subscribe
+  server.post('/push-subscribe', async (request, reply) => {
+    try {
+      await (request as any).jwtVerify();
+      const user = (request as any).user;
+      if (user.role !== 'entregador') return reply.status(403).send({ error: 'Acesso negado' });
+
+      const { subscription } = request.body as { subscription: any };
+      if (!subscription?.endpoint) return reply.code(400).send({ error: 'Subscription inválida' });
+
+      await pool.query(
+        `UPDATE public.telegas_entregadores SET push_subscription = $1 WHERE id = $2`,
+        [JSON.stringify(subscription), user.id]
+      );
+      return { ok: true };
+    } catch (err: any) {
+      if (err.statusCode === 401) return reply.status(401).send({ error: 'Não autorizado' });
+      server.log.error(err);
+      return reply.status(500).send({ error: 'Erro interno' });
+    }
+  });
 
   // POST /api/entregador/login
   server.post('/login', async (request, reply) => {

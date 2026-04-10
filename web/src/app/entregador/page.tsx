@@ -1,7 +1,46 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { api } from '@/lib/api';
+import { api, API_URL } from '@/lib/api';
+
+// ─── Push helpers ─────────────────────────────────────────────────────────────
+
+function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = window.atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr.buffer;
+}
+
+async function registerPush(token: string): Promise<void> {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    // Get VAPID public key
+    const res = await fetch(`${API_URL}/entregador/vapid-key`);
+    if (!res.ok) return;
+    const { publicKey } = await res.json();
+    if (!publicKey) return;
+
+    const reg = await navigator.serviceWorker.ready;
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+
+    const subscription = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
+    });
+
+    await fetch(`${API_URL}/entregador/push-subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ subscription }),
+    });
+  } catch (e) {
+    console.warn('Push registration failed:', e);
+  }
+}
 
 // ─── Inject Google Fonts ──────────────────────────────────────────────────────
 function useFonts() {
@@ -635,11 +674,23 @@ export default function EntregadorPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
+  // Register service worker
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  }, []);
+
   // Restore session from localStorage
   useEffect(() => {
     const t = localStorage.getItem('entregador_token');
     const n = localStorage.getItem('entregador_nome');
-    if (t) { setToken(t); setNome(n || ''); }
+    if (t) {
+      setToken(t);
+      setNome(n || '');
+      // Re-register push in case subscription expired
+      registerPush(t);
+    }
   }, []);
 
   const fetchPedidos = useCallback(async (t: string) => {
@@ -669,6 +720,8 @@ export default function EntregadorPage() {
     localStorage.setItem('entregador_nome', entregadorNome);
     setToken(newToken);
     setNome(entregadorNome);
+    // Register push after login
+    registerPush(newToken);
   }
 
   function handleLogout() {

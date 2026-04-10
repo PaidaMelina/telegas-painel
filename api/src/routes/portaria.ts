@@ -1,5 +1,12 @@
 import { FastifyInstance } from 'fastify';
 import { pool } from '../db';
+import { sendPush } from '../push';
+
+function formatTel(tel: string): string {
+  const t = String(tel).replace(/\D/g, '').replace(/^55/, '');
+  if (t.length === 11) return `(${t.slice(0,2)}) ${t.slice(2,7)}-${t.slice(7)}`;
+  return tel;
+}
 
 export async function portariaRoutes(server: FastifyInstance) {
   // GET /api/portaria/entregadores-disponiveis
@@ -69,14 +76,14 @@ export async function portariaRoutes(server: FastifyInstance) {
       let entregador: any;
       if (entregadorId) {
         const { rows } = await pool.query(
-          `SELECT id, nome, telefone FROM public.telegas_entregadores WHERE id = $1 AND ativo = true`,
+          `SELECT id, nome, telefone, push_subscription FROM public.telegas_entregadores WHERE id = $1 AND ativo = true`,
           [parseInt(entregadorId)]
         );
         if (!rows.length) return reply.code(400).send({ error: 'Entregador não encontrado' });
         entregador = rows[0];
       } else {
         const { rows: entregadores } = await pool.query(`
-          SELECT e.id, e.nome, e.telefone,
+          SELECT e.id, e.nome, e.telefone, e.push_subscription,
             COUNT(p.id) FILTER (WHERE p.status IN ('atribuido','saiu_para_entrega')) AS entregas_ativas
           FROM public.telegas_entregadores e
           LEFT JOIN public.telegas_pedidos p ON p.entregador_id = e.id
@@ -123,6 +130,26 @@ export async function portariaRoutes(server: FastifyInstance) {
            VALUES ($1, 'saida', $2, $3)`,
           [p.id, p.qtd || 1, pedidoId]
         );
+      }
+
+      // Push notification via Web Push
+      if (entregador.push_subscription) {
+        try {
+          const sub = typeof entregador.push_subscription === 'string'
+            ? JSON.parse(entregador.push_subscription)
+            : entregador.push_subscription;
+          const listaPush = produtos.map((p: any) => `${p.qtd}x ${p.nome}`).join(', ');
+          await sendPush(sub, {
+            title: `🛵 Novo pedido #${pedidoId}`,
+            body: `${nome || formatTel(tel)} — ${listaPush}\nR$${total.toFixed(2)} · ${endereco || ''}`,
+            data: { pedidoId, url: '/entregador' },
+          });
+        } catch (e: any) {
+          if (e.message === 'SUBSCRIPTION_INVALID') {
+            await pool.query(`UPDATE public.telegas_entregadores SET push_subscription = NULL WHERE id = $1`, [entregador.id]);
+          }
+          server.log.warn('Push notification falhou: ' + e.message);
+        }
       }
 
       // Notify delivery person via WhatsApp

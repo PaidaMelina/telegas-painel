@@ -27,6 +27,7 @@ server.addHook('onRequest', async (request, reply) => {
     url === '/api/version' ||
     url.startsWith('/api/auth/') ||
     url === '/api/entregador/login' ||
+    url === '/api/entregador/vapid-key' ||
     url.startsWith('/api/produtos') ||
     url.startsWith('/api/formas-pagamento')
   ) return;
