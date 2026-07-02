@@ -11,9 +11,10 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isLogin = pathname === '/login';
   const isEntregador = pathname.startsWith('/entregador');
+  const isRebanhoApp = pathname.startsWith('/rebanho-app');
 
   useEffect(() => {
-    if (isLogin || isEntregador) {
+    if (isLogin || isEntregador || isRebanhoApp) {
       setChecked(true);
       return;
     }
@@ -22,11 +23,11 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     } else {
       setChecked(true);
     }
-  }, [pathname, isLogin, isEntregador]);
+  }, [pathname, isLogin, isEntregador, isRebanhoApp]);
 
   if (!checked) return null;
 
-  if (isLogin || isEntregador) return <>{children}</>;
+  if (isLogin || isEntregador || isRebanhoApp) return <>{children}</>;
 
   return (
     <>

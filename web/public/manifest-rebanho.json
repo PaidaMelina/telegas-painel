@@ -1,0 +1,26 @@
+{
+  "name": "Rebanho",
+  "short_name": "Rebanho",
+  "description": "Lançamento de peso do rebanho",
+  "start_url": "/rebanho-app",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0d1a10",
+  "theme_color": "#0d1a10",
+  "orientation": "portrait-primary",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/api/icon-rebanho?size=192",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/api/icon-rebanho?size=512",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

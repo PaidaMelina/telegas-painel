@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Flame, LayoutDashboard, Package, Users, Contact, HeartPulse, Map, BarChart2, ShoppingCart, Archive, CreditCard, LogOut } from 'lucide-react';
+import { Flame, LayoutDashboard, Package, Users, Contact, HeartPulse, Map, BarChart2, ShoppingCart, Archive, CreditCard, Beef, LogOut } from 'lucide-react';
 import { auth } from '@/lib/api';
 
 const nav = [
@@ -16,6 +16,7 @@ const nav = [
   { href: '/mapa', label: 'Mapa', icon: Map },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart2 },
   { href: '/pagamentos', label: 'Pagamentos', icon: CreditCard },
+  { href: '/rebanho', label: 'Rebanho', icon: Beef },
 ];
 
 export default function Sidebar() {
@@ -27,12 +28,15 @@ export default function Sidebar() {
         <span className="sidebar-brand">TeleGás</span>
       </div>
       <nav className="sidebar-nav">
-        {nav.map(({ href, label, icon: Icon }) => (
-          <Link key={href} href={href} className={`sidebar-link${pathname === href ? ' active' : ''}`}>
+        {nav.map(({ href, label, icon: Icon }) => {
+          const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
+          return (
+          <Link key={href} href={href} className={`sidebar-link${active ? ' active' : ''}`}>
             <Icon size={15} strokeWidth={1.5} />
             <span>{label}</span>
           </Link>
-        ))}
+          );
+        })}
       </nav>
       <div className="sidebar-footer">
         <span className="sidebar-live-dot" />
