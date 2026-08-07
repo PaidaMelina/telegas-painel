@@ -35,6 +35,7 @@ export default function EntregadoresPage() {
   // Delete confirm
   const [deleteTarget, setDeleteTarget] = useState<Entregador | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   // Senha modal
   const [senhaTarget, setSenhaTarget] = useState<Entregador | null>(null);
@@ -47,6 +48,18 @@ export default function EntregadoresPage() {
 
   useEffect(() => {
     reload().finally(() => setLoading(false));
+  }, []);
+
+  // Esc fecha a camada aberta — o backdrop já fechava no clique, mas só no mouse.
+  useEffect(() => {
+    function onKey(ev: KeyboardEvent) {
+      if (ev.key !== 'Escape') return;
+      setDrawerOpen(false);
+      setDeleteTarget(null);
+      setSenhaTarget(null);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   const filtered = entregadores.filter((e) => {
@@ -124,12 +137,15 @@ export default function EntregadoresPage() {
   async function handleDelete() {
     if (!deleteTarget) return;
     setDeleting(true);
+    setDeleteError('');
     try {
       await api.excluirEntregador(deleteTarget.id);
       setDeleteTarget(null);
       reload();
     } catch (err: any) {
-      alert(err.message || 'Erro ao excluir');
+      // A API recusa excluir quem tem pedido em andamento (409). Mostrar isso
+      // dentro do modal, e não num alert() nativo que destoa do painel.
+      setDeleteError(err.message || 'Erro ao excluir');
     } finally {
       setDeleting(false);
     }
@@ -158,7 +174,7 @@ export default function EntregadoresPage() {
     <main className="min-h-screen relative z-10" style={{ padding: '32px 28px', width: '100%' }}>
 
       {/* ── Header ── */}
-      <header className="fade-up" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '28px' }}>
+      <header className="fade-up" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap', marginBottom: '28px' }}>
         <div>
           <p style={{ fontSize: '10px', letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginBottom: '6px' }}>
             Equipe
@@ -174,8 +190,8 @@ export default function EntregadoresPage() {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', marginTop: '6px', alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: '6px' }}>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             {FILTERS.map((f) => (
               <button key={f.key} onClick={() => setFilter(f.key)} style={{
                 fontSize: '10px', padding: '6px 14px', borderRadius: '4px',
@@ -202,7 +218,7 @@ export default function EntregadoresPage() {
       </header>
 
       {/* ── KPI Strip ── */}
-      <div className="fade-up-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginBottom: '28px' }}>
+      <div className="fade-up-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px', marginBottom: '28px' }}>
         <div className="kpi-card" style={{ borderTop: '2px solid var(--border)', padding: '20px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
             <Users size={13} style={{ color: 'var(--text-muted)' }} strokeWidth={1.5} />
@@ -324,14 +340,14 @@ export default function EntregadoresPage() {
                     padding: '7px 10px', borderRadius: '4px', cursor: 'pointer',
                     border: '1px solid #bfdbfe', background: '#eff6ff',
                     color: '#1d4ed8', transition: 'all 0.15s', display: 'flex', alignItems: 'center',
-                  }} title="Definir senha">
+                  }} title={`Definir senha de ${e.nome}`} aria-label={`Definir senha de ${e.nome}`}>
                     <KeyRound size={12} strokeWidth={2} />
                   </button>
-                  <button onClick={() => setDeleteTarget(e)} style={{
+                  <button onClick={() => { setDeleteTarget(e); setDeleteError(''); }} style={{
                     padding: '7px 12px', borderRadius: '4px', cursor: 'pointer',
                     border: '1px solid #fecaca', background: '#fff1f1',
                     color: '#c81e1e', transition: 'all 0.15s',
-                  }}>
+                  }} title={`Excluir ${e.nome}`} aria-label={`Excluir ${e.nome}`}>
                     <Trash2 size={12} strokeWidth={2} />
                   </button>
                 </div>
@@ -351,6 +367,7 @@ export default function EntregadoresPage() {
       {/* ── Backdrop ── */}
       {(drawerOpen || deleteTarget || senhaTarget) && (
         <div
+          className="overlay-backdrop"
           onClick={() => { setDrawerOpen(false); setDeleteTarget(null); setSenhaTarget(null); }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(13,20,36,0.45)', zIndex: 40, backdropFilter: 'blur(2px)' }}
         />
@@ -358,11 +375,11 @@ export default function EntregadoresPage() {
 
       {/* ── Create / Edit Drawer ── */}
       {drawerOpen && (
-        <div style={{
-          position: 'fixed', top: 0, right: 0, width: '360px', height: '100vh',
+        <div className="drawer-panel" role="dialog" aria-modal="true" aria-label={editTarget ? 'Editar entregador' : 'Novo entregador'} style={{
+          position: 'fixed', top: 0, right: 0, width: 'min(360px, 100vw)', height: '100dvh',
           background: 'var(--bg-surface)', borderLeft: '1px solid var(--border)',
           zIndex: 50, padding: '28px 24px', display: 'flex', flexDirection: 'column', gap: '20px',
-          boxShadow: '-8px 0 32px rgba(0,0,0,0.12)',
+          boxShadow: '-8px 0 32px rgba(0,0,0,0.12)', overflowY: 'auto',
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={{ fontSize: '16px', fontWeight: 800, fontFamily: 'var(--font-barlow)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
@@ -436,10 +453,10 @@ export default function EntregadoresPage() {
 
       {/* ── Senha Modal ── */}
       {senhaTarget && (
-        <div style={{
+        <div className="modal-panel" role="dialog" aria-modal="true" aria-label="Definir senha" style={{
           position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
           background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '10px',
-          zIndex: 50, padding: '28px 28px 24px', width: '360px',
+          zIndex: 50, padding: '28px 28px 24px', width: 'min(360px, calc(100vw - 32px))',
           boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
         }}>
           <h3 style={{ fontSize: '15px', fontWeight: 800, fontFamily: 'var(--font-barlow)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
@@ -486,10 +503,10 @@ export default function EntregadoresPage() {
 
       {/* ── Delete Confirm Modal ── */}
       {deleteTarget && (
-        <div style={{
+        <div className="modal-panel" role="dialog" aria-modal="true" aria-label="Confirmar exclusão" style={{
           position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
           background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '10px',
-          zIndex: 50, padding: '28px 28px 24px', width: '360px',
+          zIndex: 50, padding: '28px 28px 24px', width: 'min(360px, calc(100vw - 32px))',
           boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
         }}>
           <h3 style={{ fontSize: '15px', fontWeight: 800, fontFamily: 'var(--font-barlow)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '10px' }}>
@@ -499,6 +516,11 @@ export default function EntregadoresPage() {
             <strong>{deleteTarget.nome}</strong> será removido permanentemente.<br />
             Esta ação não pode ser desfeita.
           </p>
+          {deleteError && (
+            <p style={{ fontSize: '12px', color: '#c81e1e', fontFamily: 'var(--font-space-mono)', background: '#fff1f1', padding: '10px 12px', borderRadius: '4px', border: '1px solid #fecaca', marginBottom: '16px', lineHeight: 1.5 }}>
+              {deleteError}
+            </p>
+          )}
           <div style={{ display: 'flex', gap: '8px' }}>
             <button onClick={() => setDeleteTarget(null)} style={{
               flex: 1, padding: '10px', borderRadius: '6px', cursor: 'pointer',

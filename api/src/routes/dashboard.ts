@@ -211,7 +211,9 @@ export async function dashboardRoutes(server: FastifyInstance) {
         LIMIT 50
       `);
 
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyBY8YkjuUbLuODVYwlD8mNzO-72nMlJupY';
+      // Sem chave configurada, apenas não geocodifica: o mapa segue mostrando
+      // os pedidos que já têm coordenada, em vez de derrubar a rota.
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
 
       if (missingCoordsRes.rows.length > 0 && apiKey) {
         for (const row of missingCoordsRes.rows) {

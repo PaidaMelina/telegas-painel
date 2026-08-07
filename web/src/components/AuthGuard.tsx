@@ -10,7 +10,9 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const [checked, setChecked] = useState(false);
   const pathname = usePathname();
   const isLogin = pathname === '/login';
-  const isEntregador = pathname.startsWith('/entregador');
+  // Precisa casar o PWA do entregador (/entregador e /entregador/*) sem capturar
+  // /entregadores, que é a tela administrativa e roda dentro do layout do painel.
+  const isEntregador = pathname === '/entregador' || pathname.startsWith('/entregador/');
 
   useEffect(() => {
     if (isLogin || isEntregador) {

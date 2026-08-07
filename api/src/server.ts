@@ -4,7 +4,16 @@ import { setupRoutes } from './routes';
 
 const server = fastify({ logger: true });
 
-const JWT_SECRET = process.env.JWT_SECRET || 'telegas-secret-key-change-in-production';
+// Sem fallback: um segredo padrão em código permite que qualquer pessoa que
+// leia o repositório forje um token válido e entre no painel como admin.
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error(
+    'JWT_SECRET não definido. Gere um valor aleatório (openssl rand -base64 48) ' +
+    'e configure a variável de ambiente antes de subir a API.'
+  );
+  process.exit(1);
+}
 server.register(jwt, { secret: JWT_SECRET });
 
 // CORS + Auth — tudo no mesmo hook, CORS headers sempre primeiro
@@ -42,19 +51,38 @@ server.addHook('onRequest', async (request, reply) => {
 
 setupRoutes(server);
 
+// Ajustes de schema aplicados na subida. Falham sem derrubar o processo: um
+// banco temporariamente fora não pode impedir a API de atender /api/health,
+// senão o orquestrador reinicia em laço e o serviço nunca fica de pé.
+const migrations = [
+  'ALTER TABLE public.telegas_pedidos ADD COLUMN IF NOT EXISTS latitude NUMERIC(10,7)',
+  'ALTER TABLE public.telegas_pedidos ADD COLUMN IF NOT EXISTS longitude NUMERIC(10,7)',
+];
+
+async function applyMigrations() {
+  const { pool } = await import('./db');
+  for (const sql of migrations) {
+    try {
+      await pool.query(sql);
+    } catch (err) {
+      server.log.error({ err, sql }, 'Falha ao aplicar ajuste de schema');
+    }
+  }
+}
+
 const start = async () => {
+  const port = parseInt(process.env.PORT || '3333', 10);
+
   try {
-    const { pool } = require('./db');
-    await pool.query('ALTER TABLE public.telegas_pedidos ADD COLUMN IF NOT EXISTS latitude NUMERIC(10,7)');
-    await pool.query('ALTER TABLE public.telegas_pedidos ADD COLUMN IF NOT EXISTS longitude NUMERIC(10,7)');
-    
-    const port = parseInt(process.env.PORT || '3333', 10);
     await server.listen({ port, host: '0.0.0.0' });
     server.log.info(`Server listening on port ${port}`);
   } catch (err) {
-    server.log.error(err);
+    // Só aqui vale abortar: sem porta, o processo não tem o que fazer.
+    server.log.error(err, 'Não foi possível abrir a porta');
     process.exit(1);
   }
+
+  await applyMigrations();
 };
 
 start();

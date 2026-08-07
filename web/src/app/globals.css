@@ -278,6 +278,92 @@ body {
   font-family: var(--font-space-mono);
 }
 
+/* ── Sair ── */
+/* Estava com estilos inline + handlers onMouseOver/onMouseOut no componente;
+   o hover é trabalho do CSS, e assim o rótulo some junto no modo compacto. */
+.sidebar-logout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--sidebar-border);
+  color: var(--sidebar-text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-family: var(--font-space-mono);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.sidebar-logout:hover {
+  color: var(--sidebar-text-hover);
+  background: rgba(255,255,255,0.05);
+}
+
+/* ── Sobreposições: backdrop, drawer, modal ── */
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes drawer-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: translate(-50%, -48%) scale(0.97); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+.overlay-backdrop { animation: overlay-in 0.2s ease both; }
+.drawer-panel     { animation: drawer-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.modal-panel      { animation: modal-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* ── Foco visível ── */
+/* Sem isto, navegar por teclado no painel é invisível: os botões têm estilo
+   próprio e nenhum deles marcava o foco. */
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.sidebar :where(a, button):focus-visible {
+  outline-color: var(--sidebar-active-text);
+}
+
+/* ── Sidebar compacta em telas estreitas ── */
+/* 220px de menu fixo engolia a área útil em notebooks pequenos e tablets;
+   abaixo de 900px ela vira uma trilha de ícones. */
+@media (max-width: 900px) {
+  .sidebar { width: 62px; }
+  .sidebar-brand,
+  .sidebar-link span,
+  .sidebar-logout span,
+  .sidebar-live-label { display: none; }
+  .sidebar-logo   { justify-content: center; padding: 22px 0 18px; }
+  .sidebar-nav    { padding: 14px 8px; }
+  .sidebar-link   { justify-content: center; padding: 11px 0; }
+  .sidebar-footer { justify-content: center; padding: 16px 0; }
+  .sidebar-logout { justify-content: center; padding: 12px 0; }
+}
+
+/* ── Respeitar preferência de menos movimento ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* ── Status colors for table row left borders ── */
 .row-novo              { border-left: 3px solid #cbd5e1 !important; }
 .row-atribuido         { border-left: 3px solid #c27803 !important; }

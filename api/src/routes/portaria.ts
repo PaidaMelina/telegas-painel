@@ -164,9 +164,19 @@ export async function portariaRoutes(server: FastifyInstance) {
 
         const entTel = String(entregador.telefone || '').replace(/\D/g, '');
         const numero = entTel.startsWith('55') ? entTel : `55${entTel}`;
-        const instance = process.env.EVOLUTION_INSTANCE || 'Correios Teste';
-        const apikey = process.env.EVOLUTION_APIKEY || '16C1E1CA295C-4903-87B9-316E3A641581';
-        const evolutionUrl = process.env.EVOLUTION_URL || 'https://evolution.comercialdrb.com.br';
+        const instance = process.env.EVOLUTION_INSTANCE;
+        const apikey = process.env.EVOLUTION_APIKEY;
+        const evolutionUrl = process.env.EVOLUTION_URL;
+
+        // O pedido já foi criado e o push já saiu; o WhatsApp é o canal extra.
+        // Sem credencial configurada, avisa no log e segue.
+        if (!instance || !apikey || !evolutionUrl) {
+          server.log.warn(
+            'Evolution API não configurada (EVOLUTION_URL/EVOLUTION_INSTANCE/EVOLUTION_APIKEY): ' +
+            'entregador não será avisado por WhatsApp.'
+          );
+          return { pedidoId, entregador: entregador.nome, total };
+        }
 
         await fetch(`${evolutionUrl}/message/sendText/${encodeURIComponent(instance)}`, {
           method: 'POST',

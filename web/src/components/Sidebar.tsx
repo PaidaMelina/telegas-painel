@@ -38,17 +38,7 @@ export default function Sidebar() {
         <span className="sidebar-live-dot" />
         <span className="sidebar-live-label">Ao Vivo</span>
       </div>
-      <button
-        onClick={() => auth.logout()}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          width: '100%', background: 'none', border: 'none',
-          padding: '10px 16px', color: '#666', fontSize: 13,
-          cursor: 'pointer', borderTop: '1px solid #1a1a1a',
-        }}
-        onMouseOver={e => (e.currentTarget.style.color = '#aaa')}
-        onMouseOut={e => (e.currentTarget.style.color = '#666')}
-      >
+      <button className="sidebar-logout" onClick={() => auth.logout()} title="Sair">
         <LogOut size={14} strokeWidth={1.5} />
         <span>Sair</span>
       </button>
