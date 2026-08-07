@@ -4,64 +4,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, UserPlus, X, Plus, Minus, ShoppingCart, CheckCircle, ChevronRight, Package } from 'lucide-react';
 
 import { API_URL, api } from '@/lib/api';
-// Busca de endereço via Photon (OpenStreetMap) — sem chave, sem cadastro e sem
-// faturamento, ao contrário do Google Places. Cobre Jaguarão e Rio Branco/UY.
-const PHOTON_URL = 'https://photon.komoot.io/api/';
-
-// Centro de Jaguarão: ordena os resultados por proximidade.
-const CENTRO = { lat: -32.5657, lon: -53.3789 };
-
-interface SugestaoEndereco {
-  rua: string;
-  numero: string;
-  bairro: string;
-  cidade: string;
-  rotulo: string;
-  lat: number;
-  lng: number;
-}
-
-async function buscarEnderecos(termo: string): Promise<SugestaoEndereco[]> {
-  // O termo digitado raramente traz a cidade; sem ela o Photon devolve ruas
-  // homônimas de qualquer lugar do mundo.
-  const temCidade = /jaguar[ãa]o|rio branco/i.test(termo);
-  const consulta = temCidade ? termo : `${termo}, Jaguarão`;
-
-  const url = `${PHOTON_URL}?q=${encodeURIComponent(consulta)}`
-    + `&lat=${CENTRO.lat}&lon=${CENTRO.lon}&limit=6`;
-
-  const res = await fetch(url);
-  if (!res.ok) return [];
-  const dados = await res.json();
-
-  const sugestoes: SugestaoEndereco[] = (dados.features || [])
-    .filter((f: any) => f.properties?.name)
-    .map((f: any): SugestaoEndereco => {
-      const p = f.properties;
-      const [lng, lat] = f.geometry.coordinates;
-      const cidade = p.city || p.town || p.village || '';
-      const bairro = p.district || p.suburb || '';
-      return {
-        rua: p.name,
-        numero: p.housenumber || '',
-        bairro,
-        cidade,
-        rotulo: [p.name, bairro, cidade, p.country].filter(Boolean).join(', '),
-        lat,
-        lng,
-      };
-    });
-
-  // O OSM divide uma rua em vários trechos, e cada trecho volta como um
-  // resultado próprio — sem isso a lista repete o mesmo nome várias vezes.
-  const vistos = new Set<string>();
-  return sugestoes.filter(s => {
-    const chave = `${s.rua}|${s.bairro}|${s.cidade}`.toLowerCase();
-    if (vistos.has(chave)) return false;
-    vistos.add(chave);
-    return true;
-  });
-}
+import BuscaEndereco from '@/components/BuscaEndereco';
+import type { SugestaoEndereco } from '@/lib/enderecos';
 
 interface Cliente {
   id: number;
@@ -140,29 +84,6 @@ export default function PortariaPage() {
       .catch(() => {});
   }, [step]);
 
-  // Busca de endereço com atraso: só consulta depois que a digitação para,
-  // para não disparar uma requisição por tecla.
-  function handleEnderecoChange(valor: string) {
-    setNovoCliente(prev => ({ ...prev, endereco: valor }));
-    setNovoClienteCoords(null);
-
-    if (enderecoTimer.current) clearTimeout(enderecoTimer.current);
-    if (valor.trim().length < 3) {
-      setSugestoes([]);
-      return;
-    }
-    enderecoTimer.current = setTimeout(async () => {
-      setBuscandoEndereco(true);
-      try {
-        setSugestoes(await buscarEnderecos(valor));
-      } catch {
-        setSugestoes([]);
-      } finally {
-        setBuscandoEndereco(false);
-      }
-    }, 400);
-  }
-
   function escolherEndereco(s: SugestaoEndereco) {
     setNovoCliente(prev => ({
       ...prev,
@@ -171,7 +92,6 @@ export default function PortariaPage() {
       bairro: s.bairro || prev.bairro,
     }));
     setNovoClienteCoords({ lat: s.lat, lng: s.lng });
-    setSugestoes([]);
   }
 
   const buscarClientes = useCallback((q: string) => {
@@ -421,58 +341,21 @@ export default function PortariaPage() {
               </div>
             ))}
             <div style={{ display: 'flex', gap: 12 }}>
-              <div style={{ flex: 1.5, position: 'relative' }}>
+              <div style={{ flex: 1.5 }}>
                 <label style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>
-                  Endereço
-                  {novoClienteCoords && <span style={{ color: 'var(--green)', marginLeft: 4 }}>✓ GPS</span>}
-                  {buscandoEndereco && <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>buscando…</span>}
+                  Endereço {novoClienteCoords && <span style={{ color: 'var(--green)', marginLeft: 4 }}>✓ GPS</span>}
                 </label>
-                <input
-                  ref={enderecoInputRef}
+                <BuscaEndereco
                   value={novoCliente.endereco}
-                  onChange={e => handleEnderecoChange(e.target.value)}
-                  onBlur={() => setTimeout(() => setSugestoes([]), 150)}
-                  placeholder="Digite a rua..."
-                  autoComplete="off"
-                  style={{
+                  onChange={valor => { setNovoCliente(prev => ({ ...prev, endereco: valor })); setNovoClienteCoords(null); }}
+                  onSelect={escolherEndereco}
+                  ariaLabel="Endereço do cliente"
+                  inputStyle={{
                     width: '100%', padding: '9px 12px', border: `1px solid ${novoClienteCoords ? 'var(--green)' : 'var(--border)'}`,
                     borderRadius: 8, fontSize: 13, color: 'var(--text-primary)', background: 'var(--bg-surface-2)',
                     outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
                   }}
                 />
-
-                {sugestoes.length > 0 && (
-                  <ul style={{
-                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30,
-                    margin: '4px 0 0', padding: 4, listStyle: 'none',
-                    background: 'var(--bg-surface)', border: '1px solid var(--border)',
-                    borderRadius: 8, boxShadow: '0 12px 32px rgba(13,20,36,0.14)',
-                    maxHeight: 240, overflowY: 'auto',
-                  }}>
-                    {sugestoes.map((s, i) => (
-                      <li key={`${s.lat}-${s.lng}-${i}`}>
-                        <button
-                          type="button"
-                          onMouseDown={e => { e.preventDefault(); escolherEndereco(s); }}
-                          style={{
-                            width: '100%', textAlign: 'left', cursor: 'pointer',
-                            padding: '8px 10px', borderRadius: 6,
-                            border: 'none', background: 'none',
-                            fontSize: 12.5, color: 'var(--text-primary)',
-                            fontFamily: 'var(--font-barlow)', lineHeight: 1.4,
-                          }}
-                          onMouseOver={e => (e.currentTarget.style.background = 'var(--bg-surface-3)')}
-                          onMouseOut={e => (e.currentTarget.style.background = 'none')}
-                        >
-                          <span style={{ fontWeight: 700 }}>{s.rua}</span>
-                          <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)' }}>
-                            {[s.bairro, s.cidade].filter(Boolean).join(' · ') || 'sem bairro'}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
               </div>
               <div style={{ flex: 0.8 }}>
                 <label style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', letterSpacing: '0.06em', textTransform: 'uppercase', display: 'block', marginBottom: 5 }}>

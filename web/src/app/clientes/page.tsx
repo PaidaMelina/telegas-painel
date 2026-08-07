@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/lib/api';
+import BuscaEndereco from '@/components/BuscaEndereco';
 import { Users, Search, Pencil, X, Phone, MapPin, ShoppingBag, Tag, ChevronLeft, ChevronRight, Plus, Trash2, AlertTriangle } from 'lucide-react';
 
 interface Cliente {
@@ -676,11 +677,22 @@ export default function ClientesPage() {
 
             <div>
               <label style={labelStyle}>Endereço</label>
-              <input
-                style={inputStyle}
+              <BuscaEndereco
                 value={form.endereco}
-                onChange={e => setForm(f => ({ ...f, endereco: e.target.value }))}
-                placeholder="Rua e número"
+                onChange={valor => setForm(f => ({ ...f, endereco: valor }))}
+                // Escolher da lista preenche o bairro junto e marca o país,
+                // que é o que distingue as revendas do lado uruguaio.
+                onSelect={s => setForm(f => ({
+                  ...f,
+                  endereco: s.numero ? `${s.rua}, ${s.numero}` : s.rua,
+                  bairro: s.bairro || s.cidade || f.bairro,
+                  etiquetas: s.uruguai && !f.etiquetas.includes('Uruguai')
+                    ? [...f.etiquetas, 'Uruguai']
+                    : f.etiquetas,
+                }))}
+                ariaLabel="Endereço do cliente"
+                inputStyle={inputStyle}
+                placeholder="Digite a rua (Jaguarão ou Rio Branco)"
               />
             </div>
 

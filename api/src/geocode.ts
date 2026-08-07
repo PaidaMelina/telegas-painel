@@ -20,10 +20,13 @@ const USER_AGENT = `TeleGas-Painel/1.0 (${CONTATO})`;
 // Intervalo mínimo entre chamadas. 1100ms dá folga sobre o limite de 1/s.
 const INTERVALO_MS = 1100;
 
-// Recorte da região de atendimento: Jaguarão (BR) e Rio Branco (UY), que são
-// cidades vizinhas separadas pelo rio. Limita resultados homônimos de outros
-// estados — "Rua General Câmara" existe em dezenas de cidades brasileiras.
-const VIEWBOX = '-53.50,-32.45,-53.25,-32.70';
+// Recorte da região de atendimento: Jaguarão (BR) e Río Branco (UY), cidades
+// vizinhas separadas pelo rio. Combinado com bounded=1, é o que restringe os
+// resultados à região — "Rua General Câmara" existe em dezenas de cidades
+// brasileiras — e, principalmente, é o que permite achar endereços dos DOIS
+// lados da fronteira sem precisar saber o país de antemão.
+// Formato do Nominatim: minLon,maxLat,maxLon,minLat
+const VIEWBOX = '-53.48,-32.48,-53.28,-32.68';
 
 let ultimaChamada = 0;
 
@@ -43,23 +46,17 @@ export interface Coordenada {
 /**
  * Converte um endereço em coordenada. Retorna null quando não encontra.
  *
- * `cidadePadrao` é anexada quando o endereço não traz cidade — sem isso o
- * Nominatim devolve resultados de qualquer lugar do país.
+ * Não anexa cidade ao termo: a delimitação vem do viewbox, que cobre as duas
+ * cidades. Anexar "Jaguarão, RS, Brasil" empurrava todo endereço para o lado
+ * brasileiro e fazia os clientes uruguaios nunca serem localizados.
  */
-export async function geocodificar(
-  endereco: string,
-  cidadePadrao = 'Jaguarão, RS, Brasil'
-): Promise<Coordenada | null> {
+export async function geocodificar(endereco: string): Promise<Coordenada | null> {
   const limpo = endereco.trim();
   if (!limpo) return null;
 
-  // Evita duplicar a cidade se quem chamou já a incluiu.
-  const jaTemCidade = /jaguar[ãa]o|rio branco/i.test(limpo);
-  const consulta = jaTemCidade ? limpo : `${limpo}, ${cidadePadrao}`;
-
   const url =
     `${NOMINATIM}?format=json&limit=1&countrycodes=br,uy` +
-    `&viewbox=${VIEWBOX}&q=${encodeURIComponent(consulta)}`;
+    `&viewbox=${VIEWBOX}&bounded=1&q=${encodeURIComponent(limpo)}`;
 
   await respeitarLimite();
 
