@@ -11,7 +11,7 @@ export async function authRoutes(server: FastifyInstance) {
 
     try {
       const result = await pool.query(
-        `SELECT id, nome, email
+        `SELECT id, nome, email, COALESCE(papel, 'admin') AS papel
          FROM telegas_usuarios
          WHERE email = $1
            AND senha_hash = crypt($2, senha_hash)
@@ -25,11 +25,14 @@ export async function authRoutes(server: FastifyInstance) {
 
       const user = result.rows[0];
       const token = (server as any).jwt.sign(
-        { id: user.id, email: user.email, nome: user.nome },
+        { id: user.id, email: user.email, nome: user.nome, papel: user.papel },
         { expiresIn: '24h' }
       );
 
-      return reply.send({ token, user: { id: user.id, email: user.email, nome: user.nome } });
+      return reply.send({
+        token,
+        user: { id: user.id, email: user.email, nome: user.nome, papel: user.papel },
+      });
     } catch (err: any) {
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro interno' });

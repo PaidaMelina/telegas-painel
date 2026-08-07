@@ -47,6 +47,61 @@ export const auth = {
 };
 
 export const api = {
+  // --- Tarefas do gerente ---
+  getTarefas: async (status = 'abertas') => {
+    const res = await fetchAuth(`${API_URL}/tarefas?status=${status}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Erro ao buscar tarefas');
+    return res.json();
+  },
+
+  getTarefasResumo: async () => {
+    const res = await fetchAuth(`${API_URL}/tarefas/resumo`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Erro ao buscar resumo de tarefas');
+    return res.json();
+  },
+
+  criarTarefa: async (data: {
+    clienteId?: number | null;
+    tipo?: string;
+    titulo: string;
+    descricao?: string;
+    prioridade?: number;
+    valorRisco?: number | null;
+  }) => {
+    const res = await fetchAuth(`${API_URL}/tarefas`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error((e as any).error || 'Erro ao criar tarefa');
+    }
+    return res.json();
+  },
+
+  atualizarTarefa: async (id: number, data: Record<string, any>) => {
+    const res = await fetchAuth(`${API_URL}/tarefas/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error((e as any).error || 'Erro ao atualizar tarefa');
+    }
+    return res.json();
+  },
+
+  excluirTarefa: async (id: number) => {
+    const res = await fetchAuth(`${API_URL}/tarefas/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error((e as any).error || 'Erro ao excluir tarefa');
+    }
+    return res.json();
+  },
+
   getDashboardSummary: async () => {
     const res = await fetchAuth(`${API_URL}/dashboard/summary`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch summary');

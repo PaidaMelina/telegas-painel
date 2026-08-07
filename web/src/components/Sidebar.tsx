@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Flame, LayoutDashboard, Package, Users, Contact, HeartPulse, Map, BarChart2, ShoppingCart, Archive, CreditCard, LogOut } from 'lucide-react';
+import { Flame, LayoutDashboard, Package, Users, Contact, HeartPulse, Map, BarChart2, ShoppingCart, Archive, CreditCard, LogOut, ClipboardList } from 'lucide-react';
 import { auth } from '@/lib/api';
 
 const nav = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/tarefas', label: 'Tarefas', icon: ClipboardList },
   { href: '/portaria', label: 'Portaria', icon: ShoppingCart },
   { href: '/pedidos', label: 'Pedidos', icon: Package },
   { href: '/produtos', label: 'Produtos', icon: Archive },
