@@ -360,7 +360,17 @@ export async function clientesRoutes(server: FastifyInstance) {
 
         await pool.query(`DELETE FROM public.telegas_clientes WHERE id = $1`, [id]);
         return { ok: true, pedidosRemovidos: total };
-      } catch (err) {
+      } catch (err: any) {
+        // 23503 = violação de chave estrangeira: algum registro ainda aponta
+        // para os pedidos deste cliente. Sem esta mensagem o usuário só via
+        // "Erro ao excluir cliente", sem pista do que fazer.
+        if (err.code === '23503') {
+          server.log.error(err);
+          return reply.code(409).send({
+            error: 'Não foi possível excluir: há registros vinculados aos pedidos deste cliente. '
+                 + 'Verifique se a migração 003 do banco foi aplicada.',
+          });
+        }
         server.log.error(err);
         return reply.code(500).send({ error: 'Erro ao excluir cliente' });
       }

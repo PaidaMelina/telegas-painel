@@ -265,6 +265,10 @@ CREATE INDEX IF NOT EXISTS idx_telegas_chat_history_session
 -- ---------------------------------------------------------------------------
 -- telegas_estoque_movimentos.pedido_id só pode referenciar telegas_pedidos
 -- depois que ela existe, e a ordem de criação acima segue as dependências.
+-- ON DELETE SET NULL: a movimentação registra o que fisicamente saiu do
+-- depósito. Se fosse apagada junto com o pedido (ao excluir um cliente, por
+-- exemplo), o saldo do sistema deixaria de refletir o estoque real. Ver
+-- migrations/003_estoque_preserva_movimento.sql.
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -273,7 +277,8 @@ BEGIN
   ) THEN
     ALTER TABLE public.telegas_estoque_movimentos
       ADD CONSTRAINT telegas_estoque_movimentos_pedido_id_fkey
-      FOREIGN KEY (pedido_id) REFERENCES public.telegas_pedidos(id);
+      FOREIGN KEY (pedido_id) REFERENCES public.telegas_pedidos(id)
+      ON DELETE SET NULL;
   END IF;
 END $$;
 
