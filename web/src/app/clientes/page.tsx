@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/lib/api';
 import BuscaEndereco from '@/components/BuscaEndereco';
-import { Users, Search, Pencil, X, Phone, MapPin, ShoppingBag, Tag, ChevronLeft, ChevronRight, Plus, Trash2, AlertTriangle } from 'lucide-react';
+import { Users, Search, Pencil, X, Phone, MapPin, ShoppingBag, Tag, ChevronLeft, ChevronRight, Plus, Trash2, AlertTriangle, Target } from 'lucide-react';
 
 interface Cliente {
   id: number;
@@ -31,6 +31,21 @@ const ETIQUETAS = [
   { id: 'Problema',  bg: '#fee2e2', color: '#991b1b', border: '#fca5a5' },
   { id: 'Inativo',   bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' },
 ];
+
+// Etiquetas que caracterizam cliente comercial: são elas que fazem aparecer o
+// bloco de meta semanal, que não faz sentido para consumo residencial.
+const TIPOS_COMERCIAIS = ['Revenda', 'Padaria', 'Atacado'];
+
+interface Produto {
+  id: number;
+  nome: string;
+  unidade: string;
+}
+
+interface MetaForm {
+  produtoId: number;
+  quantidadeSemanal: string;
+}
 
 function etiquetaStyle(id: string) {
   return ETIQUETAS.find(e => e.id === id) || { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' };
@@ -101,6 +116,13 @@ export default function ClientesPage() {
   const [deleteError, setDeleteError] = useState('');
   const [precisaConfirmar, setPrecisaConfirmar] = useState(false);
 
+  // Metas semanais de compra — a régua contra a qual a queda de vendas será
+  // medida. Só faz sentido para os clientes de tipo comercial.
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [metas, setMetas] = useState<MetaForm[]>([]);
+
+  const ehComercial = form.etiquetas.some(e => TIPOS_COMERCIAIS.includes(e));
+
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async (s: string, et: string, off: number) => {
@@ -120,6 +142,13 @@ export default function ClientesPage() {
   }, []);
 
   useEffect(() => { load(search, filterEtiqueta, offset); }, []);
+
+  // Lista de produtos para o seletor de metas.
+  useEffect(() => {
+    api.getProdutos(true)
+      .then((res: any[]) => setProdutos(res.map(p => ({ id: p.id, nome: p.nome, unidade: p.unidade }))))
+      .catch(err => console.error('Falha ao carregar produtos:', err));
+  }, []);
 
   useEffect(() => {
     function onKey(ev: KeyboardEvent) {
@@ -160,6 +189,13 @@ export default function ClientesPage() {
       etiquetas: [...(c.etiquetas || [])],
     });
     setFormError('');
+    setMetas([]);
+    api.getMetasCliente(c.id)
+      .then((res: any[]) => setMetas(res.map(m => ({
+        produtoId: m.produtoId,
+        quantidadeSemanal: String(m.quantidadeSemanal),
+      }))))
+      .catch(err => console.error('Falha ao carregar metas:', err));
   }
 
   function openCreate() {
@@ -167,6 +203,32 @@ export default function ClientesPage() {
     setCreating(true);
     setForm({ telefone: '', nome: '', endereco: '', bairro: '', etiquetas: [] });
     setFormError('');
+    setMetas([]);
+  }
+
+  function addMeta() {
+    // Sugere o primeiro produto que ainda não está na lista.
+    const usados = new Set(metas.map(m => m.produtoId));
+    const livre = produtos.find(p => !usados.has(p.id));
+    if (!livre) return;
+    setMetas(ms => [...ms, { produtoId: livre.id, quantidadeSemanal: '' }]);
+  }
+
+  function updateMeta(idx: number, campo: keyof MetaForm, valor: string) {
+    setMetas(ms => ms.map((m, i) => i === idx
+      ? { ...m, [campo]: campo === 'produtoId' ? Number(valor) : valor }
+      : m));
+  }
+
+  function removeMeta(idx: number) {
+    setMetas(ms => ms.filter((_, i) => i !== idx));
+  }
+
+  /** Metas preenchidas e válidas, no formato que a API espera. */
+  function metasValidas() {
+    return metas
+      .filter(m => m.produtoId && parseFloat(m.quantidadeSemanal) > 0)
+      .map(m => ({ produtoId: m.produtoId, quantidadeSemanal: parseFloat(m.quantidadeSemanal) }));
   }
 
   function closeDrawer() {
@@ -227,11 +289,20 @@ export default function ClientesPage() {
           endereco: form.endereco.trim() || undefined,
           bairro: form.bairro.trim() || undefined,
         });
-        // criarCliente não grava etiquetas; se houver, aplica em seguida.
-        if (form.etiquetas.length > 0) {
+        // criarCliente devolve só o cadastro básico; etiquetas e metas
+        // dependem do id, então são aplicadas num segundo passo.
+        const novasMetas = ehComercial ? metasValidas() : [];
+        if (form.etiquetas.length > 0 || novasMetas.length > 0) {
           const res = await api.getClientes({ search: telefone, limit: '1' });
           const novo = res.data?.[0];
-          if (novo) await api.atualizarCliente(novo.id, { etiquetas: form.etiquetas });
+          if (novo) {
+            if (form.etiquetas.length > 0) {
+              await api.atualizarCliente(novo.id, { etiquetas: form.etiquetas });
+            }
+            if (novasMetas.length > 0) {
+              await api.salvarMetasCliente(novo.id, novasMetas);
+            }
+          }
         }
         setSearch('');
         setFilterEtiqueta('');
@@ -248,6 +319,9 @@ export default function ClientesPage() {
         bairro: form.bairro || undefined,
         etiquetas: form.etiquetas,
       });
+      // Deixar de ser comercial limpa as metas: manter régua de um cliente
+      // que virou residencial geraria alerta sem sentido.
+      await api.salvarMetasCliente(editTarget.id, ehComercial ? metasValidas() : []);
       closeDrawer();
       load(search, filterEtiqueta, offset);
     } catch (err: any) {
@@ -736,6 +810,83 @@ export default function ClientesPage() {
                 })}
               </div>
             </div>
+
+            {/* Meta semanal — a régua da detecção de queda de vendas */}
+            {ehComercial && (
+              <div style={{ background: 'var(--bg-surface-2)', borderRadius: 8, padding: '14px 16px', border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <Target size={12} style={{ color: 'var(--accent)' }} />
+                  <p style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-secondary)', fontFamily: 'var(--font-space-mono)', fontWeight: 700 }}>
+                    Meta semanal
+                  </p>
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', lineHeight: 1.55, marginBottom: 12 }}>
+                  Quanto este cliente costuma levar por semana. É contra este número
+                  que o sistema vai avisar quando as compras caírem.
+                </p>
+
+                {metas.length === 0 && (
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', fontStyle: 'italic', marginBottom: 10 }}>
+                    Sem meta definida — o sistema vai aprender sozinho, mas leva semanas.
+                  </p>
+                )}
+
+                {metas.map((m, idx) => {
+                  const usadosPorOutros = new Set(metas.filter((_, i) => i !== idx).map(x => x.produtoId));
+                  const prod = produtos.find(p => p.id === m.produtoId);
+                  return (
+                    <div key={idx} style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>
+                      <select
+                        value={m.produtoId}
+                        onChange={e => updateMeta(idx, 'produtoId', e.target.value)}
+                        aria-label="Produto"
+                        style={{ ...inputStyle, flex: 1, padding: '7px 9px', fontSize: 12.5, cursor: 'pointer' }}
+                      >
+                        {produtos.map(p => (
+                          <option key={p.id} value={p.id} disabled={usadosPorOutros.has(p.id)}>
+                            {p.nome}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        value={m.quantidadeSemanal}
+                        onChange={e => updateMeta(idx, 'quantidadeSemanal', e.target.value.replace(',', '.'))}
+                        placeholder="16"
+                        inputMode="decimal"
+                        aria-label={`Quantidade semanal de ${prod?.nome || 'produto'}`}
+                        style={{ ...inputStyle, width: 68, padding: '7px 9px', fontSize: 12.5, textAlign: 'center', fontFamily: 'var(--font-space-mono)' }}
+                      />
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', width: 30 }}>
+                        /sem
+                      </span>
+                      <button
+                        onClick={() => removeMeta(idx)}
+                        aria-label="Remover meta"
+                        title="Remover"
+                        style={{ background: 'none', border: '1px solid #fecaca', borderRadius: 5, cursor: 'pointer', padding: '5px 6px', color: '#c81e1e', display: 'flex' }}
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  );
+                })}
+
+                {metas.length < produtos.length && (
+                  <button
+                    onClick={addMeta}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      padding: '6px 12px', borderRadius: 5, cursor: 'pointer',
+                      border: '1px dashed var(--border)', background: 'var(--bg-surface)',
+                      color: 'var(--text-secondary)', fontSize: 10, fontWeight: 700,
+                      fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.05em',
+                    }}
+                  >
+                    <Plus size={11} strokeWidth={2.5} /> Produto
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Stats — só faz sentido para quem já existe */}
             {!creating && editTarget && (

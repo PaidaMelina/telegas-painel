@@ -209,6 +209,110 @@ export async function clientesRoutes(server: FastifyInstance) {
     }
   });
 
+  // GET /api/clientes/:id/metas — meta semanal de compra por produto
+  server.get<{ Params: { id: string } }>('/:id/metas', async (request, reply) => {
+    const id = parseInt(request.params.id, 10);
+    try {
+      const { rows } = await pool.query(
+        `SELECT m.produto_id, m.quantidade_semanal, m.observacao,
+                p.nome AS produto_nome, p.unidade
+           FROM public.telegas_cliente_metas m
+           JOIN public.telegas_produtos p ON p.id = m.produto_id
+          WHERE m.cliente_id = $1
+          ORDER BY p.nome`,
+        [id]
+      );
+      return rows.map((r: any) => ({
+        produtoId: r.produto_id,
+        produtoNome: r.produto_nome,
+        unidade: r.unidade,
+        quantidadeSemanal: parseFloat(r.quantidade_semanal),
+        observacao: r.observacao,
+      }));
+    } catch (err) {
+      server.log.error(err);
+      return reply.code(500).send({ error: 'Erro ao buscar metas' });
+    }
+  });
+
+  // PUT /api/clientes/:id/metas — substitui a lista inteira
+  //
+  // Substituição em vez de CRUD por item: a tela edita as metas como um bloco
+  // (adiciona, altera e remove linhas antes de salvar), e mandar o conjunto
+  // final evita ter que sincronizar exclusões uma a uma.
+  server.put<{
+    Params: { id: string };
+    Body: { metas: { produtoId: number; quantidadeSemanal: number; observacao?: string }[] };
+  }>('/:id/metas', async (request, reply) => {
+    const id = parseInt(request.params.id, 10);
+    const metas = request.body?.metas;
+
+    if (!Array.isArray(metas)) {
+      return reply.code(400).send({ error: 'Envie a lista de metas' });
+    }
+    for (const m of metas) {
+      if (!m.produtoId || !(m.quantidadeSemanal > 0)) {
+        return reply.code(400).send({ error: 'Cada meta precisa de produto e quantidade maior que zero' });
+      }
+    }
+    // Dois pesos para o mesmo produto tornariam ambíguo contra qual comparar.
+    const ids = metas.map(m => m.produtoId);
+    if (new Set(ids).size !== ids.length) {
+      return reply.code(400).send({ error: 'Há produtos repetidos na lista' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const { rows: existe } = await client.query(
+        `SELECT id FROM public.telegas_clientes WHERE id = $1`, [id]
+      );
+      if (!existe.length) {
+        await client.query('ROLLBACK');
+        return reply.code(404).send({ error: 'Cliente não encontrado' });
+      }
+
+      // Remove o que saiu da lista.
+      if (ids.length > 0) {
+        await client.query(
+          `DELETE FROM public.telegas_cliente_metas
+            WHERE cliente_id = $1 AND produto_id <> ALL($2::int[])`,
+          [id, ids]
+        );
+      } else {
+        await client.query(
+          `DELETE FROM public.telegas_cliente_metas WHERE cliente_id = $1`, [id]
+        );
+      }
+
+      for (const m of metas) {
+        await client.query(
+          `INSERT INTO public.telegas_cliente_metas
+             (cliente_id, produto_id, quantidade_semanal, observacao)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (cliente_id, produto_id) DO UPDATE
+             SET quantidade_semanal = EXCLUDED.quantidade_semanal,
+                 observacao         = EXCLUDED.observacao,
+                 atualizado_em      = NOW()`,
+          [id, m.produtoId, m.quantidadeSemanal, m.observacao?.trim() || null]
+        );
+      }
+
+      await client.query('COMMIT');
+      return { ok: true, total: metas.length };
+    } catch (err: any) {
+      await client.query('ROLLBACK').catch(() => {});
+      if (err.code === '23503') {
+        return reply.code(400).send({ error: 'Produto inexistente na lista de metas' });
+      }
+      server.log.error(err);
+      return reply.code(500).send({ error: 'Erro ao salvar metas' });
+    } finally {
+      client.release();
+    }
+  });
+
   // DELETE /api/clientes/:id
   //
   // telegas_pedidos referencia telegas_clientes(telefone) com ON DELETE CASCADE:

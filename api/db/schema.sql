@@ -112,6 +112,29 @@ CREATE TABLE IF NOT EXISTS public.telegas_estoque_movimentos (
 
 
 -- ---------------------------------------------------------------------------
+-- Meta semanal de compra (clientes B2B)
+-- ---------------------------------------------------------------------------
+-- Quanto se espera que um cliente compre de cada produto por semana. Serve de
+-- régua para a detecção de queda de vendas enquanto não há histórico suficiente
+-- para calcular o padrão observado — ver migrations/002_metas_cliente.sql.
+CREATE TABLE IF NOT EXISTS public.telegas_cliente_metas (
+  id                  SERIAL PRIMARY KEY,
+  cliente_id          INTEGER NOT NULL
+                        REFERENCES public.telegas_clientes(id) ON DELETE CASCADE,
+  produto_id          INTEGER NOT NULL
+                        REFERENCES public.telegas_produtos(id) ON DELETE CASCADE,
+  quantidade_semanal  NUMERIC(10,2) NOT NULL CHECK (quantidade_semanal > 0),
+  observacao          TEXT,
+  criado_em           TIMESTAMP NOT NULL DEFAULT NOW(),
+  atualizado_em       TIMESTAMP NOT NULL DEFAULT NOW(),
+  CONSTRAINT telegas_cliente_metas_unico UNIQUE (cliente_id, produto_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_telegas_cliente_metas_cliente
+  ON public.telegas_cliente_metas (cliente_id);
+
+
+-- ---------------------------------------------------------------------------
 -- Formas de pagamento
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.telegas_formas_pagamento (

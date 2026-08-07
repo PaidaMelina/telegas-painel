@@ -214,6 +214,28 @@ export const api = {
     return res.json();
   },
 
+  getMetasCliente: async (id: number) => {
+    const res = await fetchAuth(`${API_URL}/clientes/${id}/metas`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Erro ao buscar metas do cliente');
+    return res.json();
+  },
+
+  salvarMetasCliente: async (
+    id: number,
+    metas: { produtoId: number; quantidadeSemanal: number; observacao?: string }[]
+  ) => {
+    const res = await fetchAuth(`${API_URL}/clientes/${id}/metas`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ metas }),
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error((e as any).error || 'Erro ao salvar metas');
+    }
+    return res.json();
+  },
+
   excluirCliente: async (id: number, force?: boolean) => {
     const res = await fetchAuth(`${API_URL}/clientes/${id}${force ? '?force=true' : ''}`, { method: 'DELETE' });
     const data = await res.json().catch(() => ({}));
