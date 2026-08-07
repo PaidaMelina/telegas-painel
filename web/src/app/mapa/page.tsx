@@ -38,7 +38,9 @@ function isOnMap(bairro: string): boolean {
 export default function MapaPage() {
   const [dados, setDados]           = useState<BairroDado[]>([]);
   const [coordenadas, setCoordenadas] = useState<{lat: number, lng: number, count: number}[]>([]);
-  const [periodo, setPeriodo]       = useState('hoje');
+  // Abre em 30 dias: o mapa serve para enxergar onde se concentra a demanda,
+  // e um único dia raramente tem volume suficiente para formar padrão.
+  const [periodo, setPeriodo]       = useState('mes');
   const [loading, setLoading]       = useState(true);
   const [mapKey, setMapKey]         = useState(0); // force remount on period change
 
@@ -47,7 +49,12 @@ export default function MapaPage() {
     try {
       const [d, c] = await Promise.all([
         api.getDashboardByBairro(p),
-        api.getDashboardHeatmapAddresses(p).catch(() => [])
+        // Falha aqui não pode derrubar o mapa de bairros, mas engolir calada
+        // fazia o mapa aparecer vazio sem nenhuma pista do motivo.
+        api.getDashboardHeatmapAddresses(p).catch(err => {
+          console.error('Falha ao carregar pontos do mapa:', err);
+          return [];
+        })
       ]);
       setDados(d);
       setCoordenadas(c);

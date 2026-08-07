@@ -2,6 +2,68 @@ import { FastifyInstance } from 'fastify';
 import { pool } from '../db';
 import { geocodificar } from '../geocode';
 
+/** Impede que abrir o mapa várias vezes dispare lotes simultâneos. */
+let convertendo = false;
+
+/**
+ * Converte em coordenadas os endereços de pedidos que ainda não têm.
+ *
+ * Deliberadamente NÃO filtra por período: o período serve para escolher o que
+ * o mapa exibe, não o que precisa ser convertido. Quando os dois estavam
+ * amarrados, um pedido fora da janela selecionada nunca era convertido — e
+ * como a tela abre em "hoje", pedidos de dias anteriores ficavam invisíveis
+ * permanentemente.
+ *
+ * Chamada sem `await`: roda em segundo plano e nunca propaga exceção.
+ */
+async function converterEnderecosPendentes(server: FastifyInstance): Promise<void> {
+  if (convertendo) return;
+  convertendo = true;
+
+  // Lote pequeno porque cada endereço custa ~1s (limite do serviço gratuito).
+  const LOTE = 10;
+
+  try {
+    const { rows } = await pool.query(`
+      SELECT id, endereco
+        FROM public.telegas_pedidos
+       WHERE latitude IS NULL
+         AND endereco IS NOT NULL
+         AND TRIM(endereco) <> ''
+       ORDER BY created_at DESC
+       LIMIT ${LOTE}
+    `);
+
+    for (const row of rows) {
+      try {
+        const coord = await geocodificar(row.endereco);
+        if (coord) {
+          await pool.query(
+            `UPDATE public.telegas_pedidos SET latitude = $1, longitude = $2 WHERE id = $3`,
+            [coord.lat, coord.lng, row.id]
+          );
+          server.log.info(`Endereço convertido (pedido ${row.id}): ${row.endereco}`);
+        } else {
+          // 0,0 marca "procurado e não encontrado", para não repetir sempre a
+          // mesma consulta sem resultado. O mapa descarta esses pontos.
+          await pool.query(
+            `UPDATE public.telegas_pedidos SET latitude = 0, longitude = 0 WHERE id = $1`,
+            [row.id]
+          );
+          server.log.warn(`Endereço não localizado (pedido ${row.id}): ${row.endereco}`);
+        }
+      } catch (err) {
+        // Falha de rede ou limite do serviço: deixa NULL para tentar depois.
+        server.log.error(`Falha ao converter endereço (pedido ${row.id}): ${err}`);
+      }
+    }
+  } catch (err) {
+    server.log.error(`Falha ao buscar endereços pendentes: ${err}`);
+  } finally {
+    convertendo = false;
+  }
+}
+
 export async function dashboardRoutes(server: FastifyInstance) {
   server.get('/summary', async (_request, reply) => {
     try {
@@ -199,48 +261,14 @@ export async function dashboardRoutes(server: FastifyInstance) {
         whereClause = `DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE`;
       }
 
-      // Passo 1: geocodificação sob demanda.
+      // Passo 1: agenda a conversão dos endereços pendentes.
       //
-      // Converte alguns endereços por chamada, não todos: o Nominatim exige
-      // no máximo 1 requisição por segundo, então um lote grande faria o mapa
-      // demorar demais para abrir. Cada endereço é resolvido uma única vez
-      // (fica gravado no pedido), e a cada abertura do mapa o lote seguinte é
-      // processado — em poucas visitas a base inteira fica coberta.
-      const LOTE_GEOCODE = 5;
-
-      const missingCoordsRes = await pool.query(`
-        SELECT id, endereco
-        FROM public.telegas_pedidos
-        WHERE latitude IS NULL
-          AND endereco IS NOT NULL
-          AND TRIM(endereco) != ''
-          AND ${whereClause}
-        ORDER BY created_at DESC
-        LIMIT ${LOTE_GEOCODE}
-      `);
-
-      for (const row of missingCoordsRes.rows) {
-        try {
-          const coord = await geocodificar(row.endereco);
-          if (coord) {
-            await pool.query(
-              `UPDATE public.telegas_pedidos SET latitude = $1, longitude = $2 WHERE id = $3`,
-              [coord.lat, coord.lng, row.id]
-            );
-          } else {
-            // 0,0 marca "tentado e não encontrado", para não repetir a consulta
-            // indefinidamente. O filtro do passo 2 descarta esses pontos.
-            await pool.query(
-              `UPDATE public.telegas_pedidos SET latitude = 0, longitude = 0 WHERE id = $1`,
-              [row.id]
-            );
-          }
-        } catch (e) {
-          // Falha de rede ou limite do serviço: deixa latitude NULL para tentar
-          // de novo na próxima abertura do mapa.
-          server.log.warn(`Geocodificação falhou (pedido ${row.id}): ${e}`);
-        }
-      }
+      // Roda em segundo plano, sem `await`: converter exige ~1 segundo por
+      // endereço (limite do Nominatim), e segurar a resposta por vários
+      // segundos faria a tela parecer travada ou estourar o tempo limite.
+      // O mapa devolve o que já existe agora; o lote convertido aparece na
+      // próxima abertura.
+      converterEnderecosPendentes(server);
 
       // Step 2: Buscar e retornar todos com coordenadas válidas
       const { rows } = await pool.query(`
