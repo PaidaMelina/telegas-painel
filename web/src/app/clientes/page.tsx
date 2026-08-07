@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/lib/api';
-import { Users, Search, Pencil, X, Phone, MapPin, ShoppingBag, Tag, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Users, Search, Pencil, X, Phone, MapPin, ShoppingBag, Tag, ChevronLeft, ChevronRight, Plus, Trash2, AlertTriangle } from 'lucide-react';
 
 interface Cliente {
   id: number;
@@ -17,13 +17,17 @@ interface Cliente {
   created_at: string;
 }
 
+// As três primeiras identificam o tipo de estabelecimento (foco B2B); as demais
+// qualificam o relacionamento. A ordem é a que aparece no filtro e no cadastro.
 const ETIQUETAS = [
+  { id: 'Revenda',   bg: '#ccfbf1', color: '#115e59', border: '#5eead4' },
+  { id: 'Padaria',   bg: '#fce7f3', color: '#9d174d', border: '#f9a8d4' },
+  { id: 'Atacado',   bg: '#ede9fe', color: '#5b21b6', border: '#c4b5fd' },
+  { id: 'Uruguai',   bg: '#ffedd5', color: '#9a3412', border: '#fdba74' },
   { id: 'VIP',       bg: '#fef3c7', color: '#92400e', border: '#fcd34d' },
   { id: 'Frequente', bg: '#d1fae5', color: '#065f46', border: '#6ee7b7' },
   { id: 'Novo',      bg: '#dbeafe', color: '#1e3a8a', border: '#93c5fd' },
-  { id: 'Atacado',   bg: '#ede9fe', color: '#5b21b6', border: '#c4b5fd' },
   { id: 'Problema',  bg: '#fee2e2', color: '#991b1b', border: '#fca5a5' },
-  { id: 'Uruguai',   bg: '#ffedd5', color: '#9a3412', border: '#fdba74' },
   { id: 'Inativo',   bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' },
 ];
 
@@ -81,11 +85,20 @@ export default function ClientesPage() {
   const [filterEtiqueta, setFilterEtiqueta] = useState('');
   const [offset, setOffset] = useState(0);
 
-  // Edit drawer
+  // Drawer — serve tanto para editar (editTarget) quanto para cadastrar (creating)
   const [editTarget, setEditTarget] = useState<Cliente | null>(null);
-  const [form, setForm] = useState({ nome: '', endereco: '', bairro: '', etiquetas: [] as string[] });
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({ telefone: '', nome: '', endereco: '', bairro: '', etiquetas: [] as string[] });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const drawerOpen = creating || !!editTarget;
+
+  // Exclusão em dois tempos: a primeira tentativa vai sem `force` e a API
+  // responde quantos pedidos seriam perdidos; só então oferecemos confirmar.
+  const [deleteTarget, setDeleteTarget] = useState<Cliente | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [precisaConfirmar, setPrecisaConfirmar] = useState(false);
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -106,6 +119,14 @@ export default function ClientesPage() {
   }, []);
 
   useEffect(() => { load(search, filterEtiqueta, offset); }, []);
+
+  useEffect(() => {
+    function onKey(ev: KeyboardEvent) {
+      if (ev.key === 'Escape') { setEditTarget(null); setCreating(false); setDeleteTarget(null); }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   function handleSearch(v: string) {
     setSearch(v);
@@ -128,14 +149,53 @@ export default function ClientesPage() {
   }
 
   function openEdit(c: Cliente) {
+    setCreating(false);
     setEditTarget(c);
     setForm({
+      telefone: c.telefone,
       nome: c.nome || '',
       endereco: c.endereco || '',
       bairro: c.bairro || '',
       etiquetas: [...(c.etiquetas || [])],
     });
     setFormError('');
+  }
+
+  function openCreate() {
+    setEditTarget(null);
+    setCreating(true);
+    setForm({ telefone: '', nome: '', endereco: '', bairro: '', etiquetas: [] });
+    setFormError('');
+  }
+
+  function closeDrawer() {
+    setEditTarget(null);
+    setCreating(false);
+    setFormError('');
+  }
+
+  function openDelete(c: Cliente) {
+    setDeleteTarget(c);
+    setDeleteError('');
+    setPrecisaConfirmar(false);
+  }
+
+  async function handleDelete(force = false) {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await api.excluirCliente(deleteTarget.id, force);
+      setDeleteTarget(null);
+      load(search, filterEtiqueta, offset);
+    } catch (err: any) {
+      setDeleteError(err.message || 'Erro ao excluir cliente');
+      // Só oferece o "apagar mesmo assim" quando a recusa é pelo histórico;
+      // pedido em andamento não tem essa saída.
+      setPrecisaConfirmar(err.requerConfirmacao === true);
+    } finally {
+      setDeleting(false);
+    }
   }
 
   function toggleEtiqueta(id: string) {
@@ -148,17 +208,46 @@ export default function ClientesPage() {
   }
 
   async function handleSave() {
-    if (!editTarget) return;
     setSaving(true);
     setFormError('');
     try {
+      if (creating) {
+        // O telefone é a chave do cliente em todo o sistema (os pedidos se
+        // ligam a ele por aí), então guardamos só dígitos — do mesmo jeito
+        // que a Portaria e o atendimento por WhatsApp fazem.
+        const telefone = form.telefone.replace(/\D/g, '');
+        if (telefone.length < 10) {
+          setFormError('Informe o telefone com DDD. Ex: (53) 98424-0283');
+          return;
+        }
+        await api.criarCliente({
+          telefone,
+          nome: form.nome.trim(),
+          endereco: form.endereco.trim() || undefined,
+          bairro: form.bairro.trim() || undefined,
+        });
+        // criarCliente não grava etiquetas; se houver, aplica em seguida.
+        if (form.etiquetas.length > 0) {
+          const res = await api.getClientes({ search: telefone, limit: '1' });
+          const novo = res.data?.[0];
+          if (novo) await api.atualizarCliente(novo.id, { etiquetas: form.etiquetas });
+        }
+        setSearch('');
+        setFilterEtiqueta('');
+        setOffset(0);
+        closeDrawer();
+        load('', '', 0);
+        return;
+      }
+
+      if (!editTarget) return;
       await api.atualizarCliente(editTarget.id, {
         nome: form.nome || undefined,
         endereco: form.endereco || undefined,
         bairro: form.bairro || undefined,
         etiquetas: form.etiquetas,
       });
-      setEditTarget(null);
+      closeDrawer();
       load(search, filterEtiqueta, offset);
     } catch (err: any) {
       setFormError(err.message || 'Erro ao salvar');
@@ -206,25 +295,37 @@ export default function ClientesPage() {
           </p>
         </div>
 
-        {/* Search */}
-        <div style={{ position: 'relative', width: 280, marginTop: 6 }}>
-          <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
-          <input
-            value={search}
-            onChange={e => handleSearch(e.target.value)}
-            placeholder="Buscar nome, telefone ou endereço..."
-            style={{ ...inputStyle, paddingLeft: 36, fontSize: 13 }}
-          />
-          {search && (
-            <button onClick={() => handleSearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2 }}>
-              <X size={13} />
-            </button>
-          )}
+        <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Search */}
+          <div style={{ position: 'relative', width: 280 }}>
+            <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+            <input
+              value={search}
+              onChange={e => handleSearch(e.target.value)}
+              placeholder="Buscar nome, telefone ou endereço..."
+              style={{ ...inputStyle, paddingLeft: 36, fontSize: 13 }}
+            />
+            {search && (
+              <button onClick={() => handleSearch('')} aria-label="Limpar busca" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2 }}>
+                <X size={13} />
+              </button>
+            )}
+          </div>
+
+          <button onClick={openCreate} style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '9px 16px', borderRadius: 6, border: 'none', cursor: 'pointer',
+            background: 'var(--accent)', color: '#fff', whiteSpace: 'nowrap',
+            fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-space-mono)',
+            textTransform: 'uppercase', letterSpacing: '0.05em',
+          }}>
+            <Plus size={13} strokeWidth={2.5} /> Novo Cliente
+          </button>
         </div>
       </header>
 
       {/* KPI strip */}
-      <div className="fade-up-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 22 }}>
+      <div className="fade-up-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14, marginBottom: 22 }}>
         <div className="kpi-card" style={{ borderTop: '2px solid var(--border)', padding: '18px 22px' }}>
           <p style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginBottom: 10 }}>Total Cadastrados</p>
           <p style={{ fontSize: 38, fontWeight: 900, lineHeight: 1, fontFamily: 'var(--font-barlow)', color: 'var(--text-primary)' }}>{total}</p>
@@ -277,7 +378,7 @@ export default function ClientesPage() {
       {/* Table */}
       <div className="fade-up-3" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
         {/* Table header */}
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 1.6fr 1.4fr 80px 90px 44px', gap: 0, padding: '10px 18px', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface-2)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 1.6fr 1.4fr 80px 90px 84px', gap: 0, padding: '10px 18px', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface-2)' }}>
           {['Cliente', 'Telefone', 'Endereço', 'Etiquetas', 'Pedidos', 'Último', ''].map((h, i) => (
             <span key={i} style={{ fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', fontWeight: 700 }}>{h}</span>
           ))}
@@ -288,19 +389,63 @@ export default function ClientesPage() {
             <span className="live-dot" style={{ marginRight: 10, display: 'inline-block' }} /> Carregando...
           </div>
         ) : clientes.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '52px 0', color: 'var(--text-muted)', fontSize: 13, fontFamily: 'var(--font-space-mono)' }}>
-            Nenhum cliente encontrado.
+          // Base vazia e base sem resultado de busca são situações diferentes:
+          // a primeira pede um convite para começar, a segunda um caminho de volta.
+          <div style={{ textAlign: 'center', padding: '56px 24px' }}>
+            <Users size={28} style={{ color: 'var(--text-muted)', opacity: 0.5, marginBottom: 14 }} strokeWidth={1.5} />
+            {search || filterEtiqueta ? (
+              <>
+                <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'var(--font-barlow)', marginBottom: 6 }}>
+                  Nenhum cliente encontrado
+                </p>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginBottom: 18 }}>
+                  Nada corresponde {search && <>a “{search}”</>}{search && filterEtiqueta && ' com '}{filterEtiqueta && <>a etiqueta {filterEtiqueta}</>}.
+                </p>
+                <button onClick={() => { setSearch(''); setFilterEtiqueta(''); setOffset(0); load('', '', 0); }} style={{
+                  padding: '8px 16px', borderRadius: 6, cursor: 'pointer',
+                  border: '1px solid var(--border)', background: 'var(--bg-surface)',
+                  color: 'var(--text-secondary)', fontSize: 11, fontWeight: 700,
+                  fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.05em',
+                }}>
+                  Limpar filtros
+                </button>
+              </>
+            ) : (
+              <>
+                <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'var(--font-barlow)', marginBottom: 6 }}>
+                  Sua base está vazia
+                </p>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginBottom: 18, lineHeight: 1.6 }}>
+                  Cadastre suas revendas, padarias e mercados para<br />acompanhar o volume de compra de cada um.
+                </p>
+                <button onClick={openCreate} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '9px 18px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                  background: 'var(--accent)', color: '#fff',
+                  fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-space-mono)',
+                  textTransform: 'uppercase', letterSpacing: '0.05em',
+                }}>
+                  <Plus size={13} strokeWidth={2.5} /> Cadastrar o primeiro
+                </button>
+              </>
+            )}
           </div>
         ) : clientes.map((c, idx) => (
           <div
             key={c.id}
             className="orders-row"
+            onClick={() => openEdit(c)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={e => { if (e.key === 'Enter') openEdit(c); }}
+            title={`Abrir ${c.nome || formatTelefone(c.telefone)}`}
             style={{
               display: 'grid',
-              gridTemplateColumns: '2fr 1.2fr 1.6fr 1.4fr 80px 90px 44px',
+              gridTemplateColumns: '2fr 1.2fr 1.6fr 1.4fr 80px 90px 84px',
               gap: 0,
               padding: '11px 18px',
               alignItems: 'center',
+              cursor: 'pointer',
               background: idx % 2 === 0 ? 'var(--bg-surface)' : 'var(--bg-surface-2)',
             }}
           >
@@ -348,13 +493,25 @@ export default function ClientesPage() {
               {formatDate(c.ultimoPedido)}
             </span>
 
-            {/* Editar */}
-            <button
-              onClick={() => openEdit(c)}
-              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 5, cursor: 'pointer', padding: '5px 7px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Pencil size={13} />
-            </button>
+            {/* Ações — stopPropagation para não disparar o clique da linha */}
+            <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end' }}>
+              <button
+                onClick={e => { e.stopPropagation(); openEdit(c); }}
+                title={`Editar ${c.nome || formatTelefone(c.telefone)}`}
+                aria-label={`Editar ${c.nome || formatTelefone(c.telefone)}`}
+                style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 5, cursor: 'pointer', padding: '5px 7px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Pencil size={13} />
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); openDelete(c); }}
+                title={`Excluir ${c.nome || formatTelefone(c.telefone)}`}
+                aria-label={`Excluir ${c.nome || formatTelefone(c.telefone)}`}
+                style={{ background: 'none', border: '1px solid #fecaca', borderRadius: 5, cursor: 'pointer', padding: '5px 7px', color: '#c81e1e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
           </div>
         ))}
 
@@ -392,17 +549,72 @@ export default function ClientesPage() {
       </footer>
 
       {/* Backdrop */}
-      {editTarget && (
+      {(drawerOpen || deleteTarget) && (
         <div
-          onClick={() => setEditTarget(null)}
+          className="overlay-backdrop"
+          onClick={() => { closeDrawer(); setDeleteTarget(null); }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(13,20,36,0.45)', zIndex: 40, backdropFilter: 'blur(2px)' }}
         />
       )}
 
-      {/* Edit Drawer */}
-      {editTarget && (
-        <div style={{
-          position: 'fixed', top: 0, right: 0, width: 380, height: '100vh',
+      {/* Confirmação de exclusão */}
+      {deleteTarget && (
+        <div className="modal-panel" role="dialog" aria-modal="true" aria-label="Excluir cliente" style={{
+          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+          background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10,
+          zIndex: 50, padding: '26px 26px 22px', width: 'min(400px, calc(100vw - 32px))',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
+            <AlertTriangle size={17} style={{ color: '#c81e1e', flexShrink: 0 }} />
+            <h3 style={{ fontSize: 15, fontWeight: 800, fontFamily: 'var(--font-barlow)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Excluir cliente?
+            </h3>
+          </div>
+
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', fontFamily: 'var(--font-space-mono)', lineHeight: 1.6, marginBottom: 16 }}>
+            <strong>{deleteTarget.nome || formatTelefone(deleteTarget.telefone)}</strong> será removido da base.
+            {deleteTarget.totalPedidos > 0 && (
+              <> O histórico de <strong>{deleteTarget.totalPedidos} pedido(s)</strong> vai junto.</>
+            )}
+          </p>
+
+          {deleteError && (
+            <p style={{
+              fontSize: 12, fontFamily: 'var(--font-space-mono)', lineHeight: 1.5,
+              padding: '10px 12px', borderRadius: 4, marginBottom: 16,
+              color: precisaConfirmar ? '#92400e' : '#c81e1e',
+              background: precisaConfirmar ? '#fef3c7' : '#fff1f1',
+              border: `1px solid ${precisaConfirmar ? '#fcd34d' : '#fecaca'}`,
+            }}>
+              {deleteError}
+            </p>
+          )}
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setDeleteTarget(null)} style={{
+              flex: 1, padding: 10, borderRadius: 6, cursor: 'pointer',
+              border: '1px solid var(--border)', background: 'var(--bg-surface)',
+              color: 'var(--text-secondary)', fontSize: 11, fontWeight: 700,
+              fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase',
+            }}>
+              Cancelar
+            </button>
+            <button onClick={() => handleDelete(precisaConfirmar)} disabled={deleting} style={{
+              flex: 1, padding: 10, borderRadius: 6, cursor: deleting ? 'not-allowed' : 'pointer',
+              border: 'none', background: deleting ? '#e8a9a9' : '#c81e1e', color: '#fff',
+              fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase',
+            }}>
+              {deleting ? 'Excluindo...' : precisaConfirmar ? 'Excluir mesmo assim' : 'Excluir'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Drawer — cadastro e edição */}
+      {drawerOpen && (
+        <div className="drawer-panel" role="dialog" aria-modal="true" aria-label={creating ? 'Novo cliente' : 'Editar cliente'} style={{
+          position: 'fixed', top: 0, right: 0, width: 'min(380px, 100vw)', height: '100dvh',
           background: 'var(--bg-surface)', borderLeft: '1px solid var(--border)',
           zIndex: 50, display: 'flex', flexDirection: 'column',
           boxShadow: '-8px 0 32px rgba(0,0,0,0.12)',
@@ -410,12 +622,16 @@ export default function ClientesPage() {
           {/* Drawer header */}
           <div style={{ padding: '22px 22px 18px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
             <div>
-              <p style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginBottom: 4 }}>Editar Cliente</p>
+              <p style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginBottom: 4 }}>
+                {creating ? 'Novo Cliente' : 'Editar Cliente'}
+              </p>
               <h2 style={{ fontSize: 16, fontWeight: 800, fontFamily: 'var(--font-barlow)', textTransform: 'uppercase', letterSpacing: '0.06em', lineHeight: 1 }}>
-                {editTarget.nome || formatTelefone(editTarget.telefone)}
+                {creating
+                  ? (form.nome || 'Cadastrar')
+                  : (editTarget!.nome || formatTelefone(editTarget!.telefone))}
               </h2>
             </div>
-            <button onClick={() => setEditTarget(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
+            <button onClick={closeDrawer} aria-label="Fechar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
               <X size={18} />
             </button>
           </div>
@@ -423,23 +639,38 @@ export default function ClientesPage() {
           {/* Drawer body */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 18 }}>
 
-            {/* Phone (readonly) */}
+            {/* Telefone: editável só no cadastro — depois vira a chave do cliente */}
             <div>
-              <label style={labelStyle}>Telefone</label>
-              <div style={{ ...inputStyle, background: 'var(--bg-surface-2)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Phone size={13} />
-                {formatTelefone(editTarget.telefone)}
-              </div>
+              <label style={labelStyle}>Telefone {creating && '*'}</label>
+              {creating ? (
+                <>
+                  <input
+                    style={inputStyle}
+                    value={form.telefone}
+                    onChange={e => setForm(f => ({ ...f, telefone: e.target.value }))}
+                    placeholder="(53) 98424-0283"
+                    inputMode="tel"
+                    autoFocus
+                  />
+                  <p style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginTop: 5, lineHeight: 1.5 }}>
+                    Não pode ser alterado depois. Para o Uruguai, inclua o código do país (598).
+                  </p>
+                </>
+              ) : (
+                <div style={{ ...inputStyle, background: 'var(--bg-surface-2)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Phone size={13} />
+                  {formatTelefone(editTarget!.telefone)}
+                </div>
+              )}
             </div>
 
             <div>
-              <label style={labelStyle}>Nome</label>
+              <label style={labelStyle}>Nome {creating && '*'}</label>
               <input
                 style={inputStyle}
                 value={form.nome}
                 onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
-                placeholder="Nome do cliente"
-                autoFocus
+                placeholder={creating ? 'Ex: Padaria Central' : 'Nome do cliente'}
               />
             </div>
 
@@ -494,7 +725,8 @@ export default function ClientesPage() {
               </div>
             </div>
 
-            {/* Stats */}
+            {/* Stats — só faz sentido para quem já existe */}
+            {!creating && editTarget && (
             <div style={{ background: 'var(--bg-surface-2)', borderRadius: 8, padding: '14px 16px', border: '1px solid var(--border)' }}>
               <p style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginBottom: 10 }}>Histórico</p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -508,6 +740,7 @@ export default function ClientesPage() {
                 </div>
               </div>
             </div>
+            )}
 
             {formError && (
               <p style={{ fontSize: 12, color: '#c81e1e', fontFamily: 'var(--font-space-mono)', background: '#fff1f1', padding: '10px 12px', borderRadius: 4, border: '1px solid #fecaca' }}>
@@ -518,7 +751,7 @@ export default function ClientesPage() {
 
           {/* Drawer footer */}
           <div style={{ padding: '16px 22px', borderTop: '1px solid var(--border)', flexShrink: 0, display: 'flex', gap: 8 }}>
-            <button onClick={() => setEditTarget(null)} style={{
+            <button onClick={closeDrawer} style={{
               flex: 1, padding: 11, borderRadius: 6, cursor: 'pointer',
               border: '1px solid var(--border)', background: 'var(--bg-surface)',
               color: 'var(--text-secondary)', fontSize: 11, fontWeight: 700,
@@ -532,7 +765,7 @@ export default function ClientesPage() {
               fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase',
               transition: 'background 0.15s',
             }}>
-              {saving ? 'Salvando...' : 'Salvar'}
+              {saving ? 'Salvando...' : creating ? 'Cadastrar' : 'Salvar'}
             </button>
           </div>
         </div>

@@ -212,6 +212,22 @@ export const api = {
     return res.json();
   },
 
+  excluirCliente: async (id: number, force?: boolean) => {
+    const res = await fetchAuth(`${API_URL}/clientes/${id}${force ? '?force=true' : ''}`, { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      // O 409 carrega a contagem de pedidos: a tela usa isso para pedir
+      // confirmação em vez de só mostrar um erro seco.
+      const err: any = new Error((data as any).error || 'Erro ao excluir cliente');
+      err.status = res.status;
+      err.pedidos = (data as any).pedidos ?? 0;
+      err.pedidosAbertos = (data as any).pedidosAbertos ?? 0;
+      err.requerConfirmacao = (data as any).requerConfirmacao === true;
+      throw err;
+    }
+    return data;
+  },
+
   getRelatorioResumo: async (periodo: string, de?: string, ate?: string) => {
     const q = new URLSearchParams({ periodo, ...(de ? { de } : {}), ...(ate ? { ate } : {}) }).toString();
     const res = await fetchAuth(`${API_URL}/relatorios/resumo?${q}`, { cache: 'no-store' });

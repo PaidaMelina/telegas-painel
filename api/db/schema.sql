@@ -195,9 +195,8 @@ CREATE INDEX IF NOT EXISTS idx_telegas_pedidos_entregador_id ON public.telegas_p
 -- ---------------------------------------------------------------------------
 -- Histórico de status
 -- ---------------------------------------------------------------------------
--- Guarda apenas o status novo (não o anterior). Em produção é populado por
--- trigger; a definição da trigger não foi capturada no levantamento e precisa
--- ser extraída com pg_dump antes de recriar este banco do zero.
+-- Guarda apenas o status novo (não o anterior); a transição fica descrita em
+-- texto na coluna observacao. Populado por trigger (ver adiante).
 CREATE TABLE IF NOT EXISTS public.telegas_pedidos_status_history (
   id          BIGSERIAL PRIMARY KEY,
   pedido_id   INTEGER NOT NULL
@@ -257,10 +256,88 @@ END $$;
 
 
 -- ---------------------------------------------------------------------------
+-- Triggers
+-- ---------------------------------------------------------------------------
+-- ⚠️  DÍVIDA 6 — há DUAS triggers de histórico no mesmo evento
+--   trg_telegas_registrar_historico_status → fn_telegas_registrar_historico_status()
+--   trg_registra_historico_status_pedido   → registra_historico_status_pedido()
+-- Ambas AFTER INSERT OR UPDATE ON telegas_pedidos FOR EACH ROW. Se as duas
+-- gravam em telegas_pedidos_status_history, cada mudança de status vira duas
+-- linhas e a tela de histórico do pedido mostra tudo em duplicidade.
+-- A segunda função ainda não foi inspecionada; ver migrations/002.
+--
+-- Também existem duas triggers BEFORE UPDATE mantendo updated_at:
+--   update_telegas_pedidos_updated_at  ON telegas_pedidos
+--   update_telegas_clientes_updated_at ON telegas_clientes
+-- ambas chamando update_updated_at_column(). Por isso `updated_at` é confiável
+-- nessas duas tabelas sem a aplicação precisar defini-lo.
+
+CREATE OR REPLACE FUNCTION public.fn_telegas_registrar_historico_status()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.status IS NOT NULL THEN
+      INSERT INTO public.telegas_pedidos_status_history
+        (pedido_id, status, changed_at, changed_by, observacao)
+      VALUES
+        (NEW.id, NEW.status,
+         COALESCE(NEW.updated_at, NEW.created_at, now()),
+         'system', 'Status inicial do pedido');
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'UPDATE' THEN
+    IF NEW.status IS DISTINCT FROM OLD.status THEN
+      INSERT INTO public.telegas_pedidos_status_history
+        (pedido_id, status, changed_at, changed_by, observacao)
+      VALUES
+        (NEW.id, NEW.status,
+         COALESCE(NEW.updated_at, now()),
+         'system',
+         CONCAT('Status alterado de ', COALESCE(OLD.status, 'null'),
+                ' para ', COALESCE(NEW.status, 'null')));
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS trg_telegas_registrar_historico_status ON public.telegas_pedidos;
+CREATE TRIGGER trg_telegas_registrar_historico_status
+  AFTER INSERT OR UPDATE ON public.telegas_pedidos
+  FOR EACH ROW EXECUTE FUNCTION public.fn_telegas_registrar_historico_status();
+
+-- NOTA: update_updated_at_column() e as triggers que a usam não estão
+-- reproduzidas aqui — a definição da função ainda não foi capturada.
+
+
+-- ---------------------------------------------------------------------------
 -- View: telegas_pedidos_completos
 -- ---------------------------------------------------------------------------
--- Existe em produção, juntando pedidos com dados do cliente (colunas extras:
--- cliente_nome_cadastrado, total_pedidos_cliente, cliente_desde). A definição
--- SQL não foi capturada e precisa vir de:
---   SELECT pg_get_viewdef('public.telegas_pedidos_completos'::regclass, true);
--- Nenhuma rota da API a utiliza atualmente.
+-- Legado: projeta apenas as colunas da geração 1 (produto/quantidade/
+-- valor_total), ignorando produtos/total da geração 2. Um pedido criado pela
+-- portaria aparece aqui sem itens e sem valor. Nenhuma rota da API a usa.
+CREATE OR REPLACE VIEW public.telegas_pedidos_completos AS
+SELECT p.id,
+       p.telefone,
+       p.nome_cliente,
+       p.endereco,
+       p.produto,
+       p.quantidade,
+       p.forma_pagamento,
+       p.valor_total,
+       p.mensagem_ia,
+       p.status,
+       p.created_at,
+       p.updated_at,
+       c.nome          AS cliente_nome_cadastrado,
+       c.total_pedidos AS total_pedidos_cliente,
+       c.created_at    AS cliente_desde
+  FROM public.telegas_pedidos p
+  LEFT JOIN public.telegas_clientes c
+    ON p.telefone::text = c.telefone::text;

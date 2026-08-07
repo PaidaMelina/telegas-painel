@@ -208,4 +208,58 @@ export async function clientesRoutes(server: FastifyInstance) {
       return reply.code(500).send({ error: 'Erro ao atualizar cliente' });
     }
   });
+
+  // DELETE /api/clientes/:id
+  //
+  // telegas_pedidos referencia telegas_clientes(telefone) com ON DELETE CASCADE:
+  // apagar um cliente leva junto TODOS os pedidos dele e o histórico de status.
+  // Por isso a exclusão é recusada quando existe histórico, a menos que venha
+  // ?force=true — assim quem chama assume a perda de forma explícita.
+  server.delete<{ Params: { id: string }; Querystring: { force?: string } }>(
+    '/:id', async (request, reply) => {
+      const id = parseInt(request.params.id, 10);
+      const force = request.query.force === 'true';
+
+      try {
+        const { rows: alvo } = await pool.query(
+          `SELECT id, nome, telefone FROM public.telegas_clientes WHERE id = $1`,
+          [id]
+        );
+        if (!alvo.length) return reply.code(404).send({ error: 'Cliente não encontrado' });
+
+        const { rows: cont } = await pool.query(
+          `SELECT COUNT(*)::int AS total,
+                  COUNT(*) FILTER (WHERE status IN ('novo','confirmado','atribuido','saiu_para_entrega'))::int AS abertos
+             FROM public.telegas_pedidos
+            WHERE telefone = $1`,
+          [alvo[0].telefone]
+        );
+        const { total, abertos } = cont[0];
+
+        // Pedido em andamento nunca some por exclusão de cadastro.
+        if (abertos > 0) {
+          return reply.code(409).send({
+            error: `Cliente possui ${abertos} pedido(s) em andamento. Conclua ou cancele antes de excluir.`,
+            pedidos: total,
+            pedidosAbertos: abertos,
+          });
+        }
+
+        if (total > 0 && !force) {
+          return reply.code(409).send({
+            error: `Cliente possui ${total} pedido(s) no histórico, que serão apagados junto.`,
+            pedidos: total,
+            pedidosAbertos: 0,
+            requerConfirmacao: true,
+          });
+        }
+
+        await pool.query(`DELETE FROM public.telegas_clientes WHERE id = $1`, [id]);
+        return { ok: true, pedidosRemovidos: total };
+      } catch (err) {
+        server.log.error(err);
+        return reply.code(500).send({ error: 'Erro ao excluir cliente' });
+      }
+    }
+  );
 }
