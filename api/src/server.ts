@@ -16,6 +16,26 @@ if (!JWT_SECRET) {
 }
 server.register(jwt, { secret: JWT_SECRET });
 
+// Aceita corpo vazio em requisições application/json.
+//
+// Várias rotas de ação (concluir pedido, aceitar, entregar) não recebem dados,
+// e é comum o cliente mandar o cabeçalho application/json mesmo assim. O
+// comportamento padrão do Fastify é responder 400 nesse caso, o que aparece
+// como falha inexplicável na tela. Aqui o corpo vazio vira {}.
+server.addContentTypeParser(
+  'application/json',
+  { parseAs: 'string' },
+  (_req, body: string | Buffer, done) => {
+    const texto = typeof body === 'string' ? body : body.toString();
+    if (!texto || texto.trim() === '') return done(null, {});
+    try {
+      done(null, JSON.parse(texto));
+    } catch (err) {
+      done(err as Error);
+    }
+  }
+);
+
 // CORS + Auth — tudo no mesmo hook, CORS headers sempre primeiro
 server.addHook('onRequest', async (request, reply) => {
   const origin = request.headers.origin || '*';

@@ -117,9 +117,11 @@ export const api = {
   },
 
   concluirPedido: async (id: number) => {
+    // Sem Content-Type: a rota não recebe corpo, e declarar application/json
+    // sem enviar nada faz o Fastify rejeitar a requisição com 400 antes de
+    // chegar no handler.
     const res = await fetchAuth(`${API_URL}/pedidos/${id}/concluir`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
