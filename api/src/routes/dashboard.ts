@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { pool } from '../db';
+import { geocodificar } from '../geocode';
 
 export async function dashboardRoutes(server: FastifyInstance) {
   server.get('/summary', async (_request, reply) => {
@@ -198,45 +199,46 @@ export async function dashboardRoutes(server: FastifyInstance) {
         whereClause = `DATE(created_at AT TIME ZONE 'America/Sao_Paulo') = CURRENT_DATE`;
       }
 
-      // Step 1: Geocodificação reativa (Lazy Geocoding)
-      // Pega até 10 pedidos recentes sem latitude para tentar converter agora
+      // Passo 1: geocodificação sob demanda.
+      //
+      // Converte alguns endereços por chamada, não todos: o Nominatim exige
+      // no máximo 1 requisição por segundo, então um lote grande faria o mapa
+      // demorar demais para abrir. Cada endereço é resolvido uma única vez
+      // (fica gravado no pedido), e a cada abertura do mapa o lote seguinte é
+      // processado — em poucas visitas a base inteira fica coberta.
+      const LOTE_GEOCODE = 5;
+
       const missingCoordsRes = await pool.query(`
-        SELECT id, endereco 
-        FROM public.telegas_pedidos 
-        WHERE latitude IS NULL 
-          AND endereco IS NOT NULL 
+        SELECT id, endereco
+        FROM public.telegas_pedidos
+        WHERE latitude IS NULL
+          AND endereco IS NOT NULL
           AND TRIM(endereco) != ''
           AND ${whereClause}
-        ORDER BY created_at DESC 
-        LIMIT 50
+        ORDER BY created_at DESC
+        LIMIT ${LOTE_GEOCODE}
       `);
 
-      // Sem chave configurada, apenas não geocodifica: o mapa segue mostrando
-      // os pedidos que já têm coordenada, em vez de derrubar a rota.
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-
-      if (missingCoordsRes.rows.length > 0 && apiKey) {
-        for (const row of missingCoordsRes.rows) {
-          const q = encodeURIComponent(`${row.endereco}, Jaguarão, RS, Brasil`);
-          try {
-            const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${q}&key=${apiKey}`;
-            const req = await fetch(url);
-            const data = await req.json();
-            
-            if (data.status === 'OK' && data.results && data.results.length > 0) {
-              const location = data.results[0].geometry.location;
-              await pool.query(
-                `UPDATE public.telegas_pedidos SET latitude = $1, longitude = $2 WHERE id = $3`,
-                [location.lat, location.lng, row.id]
-              );
-            } else {
-              // Mark as invalid (using 0 bounds to avoid re-fetching, or just leave it)
-              // Just to prevent infinite loop for invalid addresses:
-              await pool.query(`UPDATE public.telegas_pedidos SET latitude = 0, longitude = 0 WHERE id = $1`, [row.id]);
-            }
-          } catch (e) {
-            server.log.error('Erro Geocoding Google: ' + e);
+      for (const row of missingCoordsRes.rows) {
+        try {
+          const coord = await geocodificar(row.endereco);
+          if (coord) {
+            await pool.query(
+              `UPDATE public.telegas_pedidos SET latitude = $1, longitude = $2 WHERE id = $3`,
+              [coord.lat, coord.lng, row.id]
+            );
+          } else {
+            // 0,0 marca "tentado e não encontrado", para não repetir a consulta
+            // indefinidamente. O filtro do passo 2 descarta esses pontos.
+            await pool.query(
+              `UPDATE public.telegas_pedidos SET latitude = 0, longitude = 0 WHERE id = $1`,
+              [row.id]
+            );
           }
+        } catch (e) {
+          // Falha de rede ou limite do serviço: deixa latitude NULL para tentar
+          // de novo na próxima abertura do mapa.
+          server.log.warn(`Geocodificação falhou (pedido ${row.id}): ${e}`);
         }
       }
 
