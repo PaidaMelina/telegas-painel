@@ -134,6 +134,34 @@ export async function pedidosRoutes(server: FastifyInstance) {
     }
   });
 
+  // DELETE /api/pedidos/:id
+  //
+  // Só para pedido já encerrado: apagar algo em andamento esconderia uma
+  // entrega que ainda vai acontecer. O histórico de status vai junto (cascata),
+  // e a baixa de estoque permanece — o produto saiu do depósito de verdade.
+  server.delete<{ Params: { id: string } }>('/:id', async (request, reply) => {
+    const { id } = request.params;
+    try {
+      const { rows } = await pool.query(
+        `SELECT status FROM public.telegas_pedidos WHERE id = $1`, [id]
+      );
+      if (!rows.length) return reply.code(404).send({ error: 'Pedido não encontrado' });
+
+      if (!['entregue', 'cancelado'].includes(rows[0].status)) {
+        return reply.code(409).send({
+          error: 'Só é possível excluir pedido concluído ou cancelado. '
+               + 'Conclua ou cancele antes.',
+        });
+      }
+
+      await pool.query(`DELETE FROM public.telegas_pedidos WHERE id = $1`, [id]);
+      return { ok: true };
+    } catch (err: any) {
+      server.log.error(err);
+      return reply.code(500).send({ error: `Erro ao excluir pedido: ${err.message}` });
+    }
+  });
+
   // Concluir pedido: atualiza DB + dispara notificação via n8n
   server.post('/:id/concluir', async (request, reply) => {
     const { id } = request.params as any;

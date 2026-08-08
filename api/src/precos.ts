@@ -20,20 +20,29 @@ export interface PrecoResolvido {
   moeda: string | null;
   simbolo: string | null;
   cotacao: number | null;
-  /** De onde veio: tabela do produto ou preço de grupo. */
+  /** De onde veio: tabela do produto, preço de grupo ou acordo com o cliente. */
   especial: boolean;
   etiqueta: string | null;
+  /** true quando o preço foi combinado com este cliente especificamente. */
+  doCliente?: boolean;
 }
 
 /**
- * Preços válidos para um cliente, considerando as etiquetas dele.
+ * Preços válidos para um cliente.
  *
- * Havendo mais de uma etiqueta com preço para o mesmo produto, vence o menor
- * — o cliente não deve ser penalizado por se encaixar em dois grupos.
+ * Ordem de precedência, do mais específico ao mais geral:
+ *
+ *   1. preço combinado com aquele cliente
+ *   2. preço do grupo (etiqueta)
+ *   3. preço de tabela do produto
+ *
+ * Entre duas etiquetas com preço para o mesmo produto, vence o menor: o
+ * cliente não deve ser penalizado por se encaixar em dois grupos.
  */
 export async function resolverPrecos(
   produtoIds: number[],
-  etiquetas: string[]
+  etiquetas: string[],
+  clienteId?: number | null
 ): Promise<Map<number, PrecoResolvido>> {
   const mapa = new Map<number, PrecoResolvido>();
   if (produtoIds.length === 0) return mapa;
@@ -53,20 +62,27 @@ export async function resolverPrecos(
       cotacao: null,
       especial: false,
       etiqueta: null,
+      doCliente: false,
     });
   }
 
-  if (etiquetas.length === 0) return mapa;
+  if (etiquetas.length === 0 && !clienteId) return mapa;
 
   const { rows: especiais } = await pool.query(
-    `SELECT pe.produto_id, pe.etiqueta, pe.preco, pe.moeda,
+    `SELECT pe.produto_id, pe.etiqueta, pe.cliente_id, pe.preco, pe.moeda,
             m.simbolo, m.unidades_por_real
        FROM public.telegas_precos_especiais pe
        LEFT JOIN public.telegas_moedas m ON m.codigo = pe.moeda
       WHERE pe.ativo
         AND pe.produto_id = ANY($1::int[])
-        AND pe.etiqueta   = ANY($2::text[])`,
-    [produtoIds, etiquetas]
+        AND (
+          ($2::int IS NOT NULL AND pe.cliente_id = $2::int)
+          OR (pe.etiqueta = ANY($3::text[]))
+        )
+      -- Cliente antes de etiqueta: assim a linha do cliente é a última a
+      -- sobrescrever e prevalece sobre a regra do grupo.
+      ORDER BY (pe.cliente_id IS NOT NULL) ASC`,
+    [produtoIds, clienteId ?? null, etiquetas]
   );
 
   for (const e of especiais) {
@@ -80,8 +96,10 @@ export async function resolverPrecos(
 
     const atual = mapa.get(e.produto_id);
     if (!atual) continue;
-    // Entre dois grupos, prevalece o preço menor.
-    if (atual.especial && atual.precoBrl <= precoBrl) continue;
+
+    const ehDoCliente = e.cliente_id !== null;
+    // Preço do cliente sempre vence. Entre grupos, prevalece o menor.
+    if (!ehDoCliente && atual.especial && atual.precoBrl <= precoBrl) continue;
 
     mapa.set(e.produto_id, {
       produtoId: e.produto_id,
@@ -91,7 +109,8 @@ export async function resolverPrecos(
       simbolo: e.simbolo || null,
       cotacao,
       especial: true,
-      etiqueta: e.etiqueta,
+      etiqueta: ehDoCliente ? null : e.etiqueta,
+      doCliente: ehDoCliente,
     });
   }
 

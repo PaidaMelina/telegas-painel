@@ -17,6 +17,9 @@ RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 
+# As migrações são lidas em tempo de execução, na subida da API.
+COPY --from=builder /app/db ./db
+
 ENV NODE_ENV=production
 
 EXPOSE 3333

@@ -47,7 +47,11 @@ export async function portariaRoutes(server: FastifyInstance) {
         clienteId ? parseInt(clienteId, 10) : null,
         telefone
       );
-      const precos = await resolverPrecos(prods.map((p: any) => p.id), etiquetas);
+      const precos = await resolverPrecos(
+        prods.map((p: any) => p.id),
+        etiquetas,
+        clienteId ? parseInt(clienteId, 10) : null
+      );
       return Array.from(precos.values());
     } catch (err) {
       server.log.error(err);
@@ -95,7 +99,8 @@ export async function portariaRoutes(server: FastifyInstance) {
       const etiquetas = await etiquetasDoCliente(cId, tel);
       const precos = await resolverPrecos(
         produtos.map((p: any) => p.id).filter(Boolean),
-        etiquetas
+        etiquetas,
+        cId
       );
 
       // A moeda do pedido é descoberta antes de somar: os itens precisam saber

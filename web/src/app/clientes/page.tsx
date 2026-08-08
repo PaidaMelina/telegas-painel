@@ -47,6 +47,19 @@ interface MetaForm {
   quantidadeSemanal: string;
 }
 
+interface PrecoForm {
+  produtoId: number;
+  preco: string;
+  moeda: string;   // '' = reais
+}
+
+interface Moeda {
+  codigo: string;
+  nome: string;
+  simbolo: string;
+  unidadesPorReal: number;
+}
+
 // O banco guarda um único campo de endereço, com número e complemento já
 // embutidos — é assim que a Portaria grava, e é a forma que chega pronta ao
 // entregador e à mensagem do WhatsApp. A tela separa os campos só para digitar.
@@ -149,6 +162,11 @@ export default function ClientesPage() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [metas, setMetas] = useState<MetaForm[]>([]);
 
+  // Preço combinado com este cliente. Vale para qualquer cliente, não só
+  // comercial: acordo individual é a exceção mais comum.
+  const [precos, setPrecos] = useState<PrecoForm[]>([]);
+  const [moedas, setMoedas] = useState<Moeda[]>([]);
+
   const ehComercial = form.etiquetas.some(e => TIPOS_COMERCIAIS.includes(e));
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -176,6 +194,12 @@ export default function ClientesPage() {
     api.getProdutos(true)
       .then((res: any[]) => setProdutos(res.map(p => ({ id: p.id, nome: p.nome, unidade: p.unidade }))))
       .catch(err => console.error('Falha ao carregar produtos:', err));
+  }, []);
+
+  useEffect(() => {
+    api.getMoedas()
+      .then(setMoedas)
+      .catch(err => console.error('Falha ao carregar moedas:', err));
   }, []);
 
   useEffect(() => {
@@ -227,6 +251,15 @@ export default function ClientesPage() {
         quantidadeSemanal: String(m.quantidadeSemanal),
       }))))
       .catch(err => console.error('Falha ao carregar metas:', err));
+
+    setPrecos([]);
+    api.getPrecosDoCliente(c.id)
+      .then((res: any[]) => setPrecos(res.map(p => ({
+        produtoId: p.produtoId,
+        preco: String(p.preco),
+        moeda: p.moeda || '',
+      }))))
+      .catch(err => console.error('Falha ao carregar preços:', err));
   }
 
   function openCreate() {
@@ -235,6 +268,7 @@ export default function ClientesPage() {
     setForm({ telefone: '', nome: '', endereco: '', numero: '', complemento: '', bairro: '', etiquetas: [] });
     setFormError('');
     setMetas([]);
+    setPrecos([]);
   }
 
   function addMeta() {
@@ -253,6 +287,29 @@ export default function ClientesPage() {
 
   function removeMeta(idx: number) {
     setMetas(ms => ms.filter((_, i) => i !== idx));
+  }
+
+  function addPreco() {
+    const usados = new Set(precos.map(p => p.produtoId));
+    const livre = produtos.find(p => !usados.has(p.id));
+    if (!livre) return;
+    setPrecos(ps => [...ps, { produtoId: livre.id, preco: '', moeda: '' }]);
+  }
+
+  function updatePreco(idx: number, campo: keyof PrecoForm, valor: string) {
+    setPrecos(ps => ps.map((p, i) => i === idx
+      ? { ...p, [campo]: campo === 'produtoId' ? Number(valor) : valor }
+      : p));
+  }
+
+  function removePreco(idx: number) {
+    setPrecos(ps => ps.filter((_, i) => i !== idx));
+  }
+
+  function precosValidos() {
+    return precos
+      .filter(p => p.produtoId && parseFloat(p.preco) > 0)
+      .map(p => ({ produtoId: p.produtoId, preco: parseFloat(p.preco), moeda: p.moeda || null }));
   }
 
   /** Metas preenchidas e válidas, no formato que a API espera. */
@@ -324,7 +381,7 @@ export default function ClientesPage() {
         // criarCliente devolve só o cadastro básico; etiquetas e metas
         // dependem do id, então são aplicadas num segundo passo.
         const novasMetas = ehComercial ? metasValidas() : [];
-        if (form.etiquetas.length > 0 || novasMetas.length > 0) {
+        if (form.etiquetas.length > 0 || novasMetas.length > 0 || precosValidos().length > 0) {
           const res = await api.getClientes({ search: telefone, limit: '1' });
           const novo = res.data?.[0];
           if (novo) {
@@ -333,6 +390,10 @@ export default function ClientesPage() {
             }
             if (novasMetas.length > 0) {
               await api.salvarMetasCliente(novo.id, novasMetas);
+            }
+            const novosPrecos = precosValidos();
+            if (novosPrecos.length > 0) {
+              await api.salvarPrecosDoCliente(novo.id, novosPrecos);
             }
           }
         }
@@ -354,6 +415,7 @@ export default function ClientesPage() {
       // Deixar de ser comercial limpa as metas: manter régua de um cliente
       // que virou residencial geraria alerta sem sentido.
       await api.salvarMetasCliente(editTarget.id, ehComercial ? metasValidas() : []);
+      await api.salvarPrecosDoCliente(editTarget.id, precosValidos());
       closeDrawer();
       load(search, filterEtiqueta, offset);
     } catch (err: any) {
@@ -874,6 +936,94 @@ export default function ClientesPage() {
                   );
                 })}
               </div>
+            </div>
+
+            {/* Preço combinado com este cliente */}
+            <div style={{ background: 'var(--bg-surface-2)', borderRadius: 8, padding: '14px 16px', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <ShoppingBag size={12} style={{ color: 'var(--accent)' }} />
+                <p style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-secondary)', fontFamily: 'var(--font-space-mono)', fontWeight: 700 }}>
+                  Preço combinado
+                </p>
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', lineHeight: 1.55, marginBottom: 12 }}>
+                Preço só deste cliente, em qualquer produto. Prevalece sobre o
+                preço de tabela e sobre preço de grupo.
+              </p>
+
+              {precos.map((pr, idx) => {
+                const usadosPorOutros = new Set(precos.filter((_, i) => i !== idx).map(x => x.produtoId));
+                const moeda = moedas.find(m => m.codigo === pr.moeda);
+                const valor = parseFloat(pr.preco);
+                const emReais = moeda && valor > 0
+                  ? (valor / moeda.unidadesPorReal).toFixed(2)
+                  : null;
+                return (
+                  <div key={idx} style={{ marginBottom: 10 }}>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <select
+                        value={pr.produtoId}
+                        onChange={e => updatePreco(idx, 'produtoId', e.target.value)}
+                        aria-label="Produto"
+                        style={{ ...inputStyle, flex: 1, padding: '7px 9px', fontSize: 12.5, cursor: 'pointer' }}
+                      >
+                        {produtos.map(p => (
+                          <option key={p.id} value={p.id} disabled={usadosPorOutros.has(p.id)}>
+                            {p.nome}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={pr.moeda}
+                        onChange={e => updatePreco(idx, 'moeda', e.target.value)}
+                        aria-label="Moeda"
+                        style={{ ...inputStyle, width: 74, padding: '7px 6px', fontSize: 12, cursor: 'pointer' }}
+                      >
+                        <option value="">R$</option>
+                        {moedas.map(m => (
+                          <option key={m.codigo} value={m.codigo}>{m.simbolo} {m.codigo}</option>
+                        ))}
+                      </select>
+                      <input
+                        value={pr.preco}
+                        onChange={e => updatePreco(idx, 'preco', e.target.value.replace(',', '.'))}
+                        placeholder="770"
+                        inputMode="decimal"
+                        aria-label="Valor"
+                        style={{ ...inputStyle, width: 82, padding: '7px 9px', fontSize: 12.5, textAlign: 'right', fontFamily: 'var(--font-space-mono)' }}
+                      />
+                      <button
+                        onClick={() => removePreco(idx)}
+                        aria-label="Remover preço"
+                        title="Remover"
+                        style={{ background: 'none', border: '1px solid #fecaca', borderRadius: 5, cursor: 'pointer', padding: '5px 6px', color: '#c81e1e', display: 'flex' }}
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                    {emReais && (
+                      <p style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginTop: 3, marginLeft: 2 }}>
+                        equivale a R$ {emReais} · cotação {moeda!.unidadesPorReal}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+
+              {precos.length < produtos.length && (
+                <button
+                  onClick={addPreco}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '6px 12px', borderRadius: 5, cursor: 'pointer',
+                    border: '1px dashed var(--border)', background: 'var(--bg-surface)',
+                    color: 'var(--text-secondary)', fontSize: 10, fontWeight: 700,
+                    fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.05em',
+                  }}
+                >
+                  <Plus size={11} strokeWidth={2.5} /> Preço
+                </button>
+              )}
             </div>
 
             {/* Meta semanal — a régua da detecção de queda de vendas */}

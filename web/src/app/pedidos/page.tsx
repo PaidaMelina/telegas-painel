@@ -115,6 +115,7 @@ export default function PedidosPage() {
   const closeDetail = () => {
     setSelectedId(null); setDetail(null); setHistory([]);
     setActionError(''); setShowCancelModal(false); setMotivoCancel('');
+    setConfirmarExclusao(false);
   };
 
   const handleConcluir = async () => {
@@ -125,6 +126,25 @@ export default function PedidosPage() {
       closeDetail();
       await fetchPedidos();
     } catch (e: any) { setActionError(e.message || 'Erro ao concluir'); setActionLoading(false); }
+  };
+
+  // Exclusão em dois cliques, sem modal: o primeiro arma, o segundo executa.
+  const [confirmarExclusao, setConfirmarExclusao] = useState(false);
+
+  const handleExcluir = async () => {
+    if (!detail) return;
+    if (!confirmarExclusao) { setConfirmarExclusao(true); return; }
+    setActionLoading(true); setActionError('');
+    try {
+      await api.excluirPedido(detail.id);
+      closeDetail();
+      await fetchPedidos();
+    } catch (e: any) {
+      setActionError(e.message || 'Erro ao excluir');
+      setActionLoading(false);
+    } finally {
+      setConfirmarExclusao(false);
+    }
   };
 
   const handleCancelar = async () => {
@@ -303,6 +323,18 @@ export default function PedidosPage() {
                         ✕ Cancelar
                       </button>
                     </div>
+                  )}
+                  {/* Pedido encerrado pode ser removido — útil para limpar
+                      registros de teste. Em andamento, não: apagaria uma
+                      entrega que ainda vai acontecer. */}
+                  {isFinal(detail.status) && (
+                    <button
+                      disabled={actionLoading}
+                      onClick={handleExcluir}
+                      style={{ fontSize: '10px', padding: '8px 16px', borderRadius: '4px', border: '1px solid #fca5a5', background: '#fff1f1', color: '#991b1b', fontFamily: 'var(--font-space-mono)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', opacity: actionLoading ? 0.5 : 1 }}
+                    >
+                      {confirmarExclusao ? 'Confirmar exclusão?' : '🗑 Excluir pedido'}
+                    </button>
                   )}
                   {actionError && <p style={{ fontSize: '12px', color: '#991b1b', marginTop: '10px', fontFamily: 'var(--font-space-mono)' }}>⚠ {actionError}</p>}
                 </div>

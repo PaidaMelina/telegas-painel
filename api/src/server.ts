@@ -71,22 +71,32 @@ server.addHook('onRequest', async (request, reply) => {
 
 setupRoutes(server);
 
-// Ajustes de schema aplicados na subida. Falham sem derrubar o processo: um
-// banco temporariamente fora não pode impedir a API de atender /api/health,
-// senão o orquestrador reinicia em laço e o serviço nunca fica de pé.
-const migrations = [
-  'ALTER TABLE public.telegas_pedidos ADD COLUMN IF NOT EXISTS latitude NUMERIC(10,7)',
-  'ALTER TABLE public.telegas_pedidos ADD COLUMN IF NOT EXISTS longitude NUMERIC(10,7)',
-];
-
+// Migrações aplicadas na subida, a partir de db/migrations. Falham sem
+// derrubar o processo: um banco temporariamente fora não pode impedir a API de
+// atender /api/health, senão o orquestrador reinicia em laço e o serviço nunca
+// fica de pé.
 async function applyMigrations() {
-  const { pool } = await import('./db');
-  for (const sql of migrations) {
-    try {
-      await pool.query(sql);
-    } catch (err) {
-      server.log.error({ err, sql }, 'Falha ao aplicar ajuste de schema');
-    }
+  try {
+    const { aplicarMigracoes, marcarComoAplicadas } = await import('./migrar');
+
+    // Aplicadas manualmente no pgweb antes de existir este mecanismo.
+    await marcarComoAplicadas([
+      '001_corrige_integridade.sql',
+      '002_metas_cliente.sql',
+      '003_estoque_preserva_movimento.sql',
+      '004_tarefas.sql',
+      '005_corrige_trigger_tarefas.sql',
+      '006_tarefas_recorrentes.sql',
+      '007_precos_moeda.sql',
+    ]);
+
+    await aplicarMigracoes({
+      info: (m) => server.log.info(m),
+      warn: (m) => server.log.warn(m),
+      error: (m) => server.log.error(m),
+    });
+  } catch (err) {
+    server.log.error({ err }, 'Falha ao aplicar migrações');
   }
 }
 

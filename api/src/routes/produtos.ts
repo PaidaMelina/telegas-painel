@@ -2,6 +2,25 @@ import { FastifyInstance } from 'fastify';
 import { pool } from '../db';
 
 export async function produtosRoutes(server: FastifyInstance) {
+  // GET /api/produtos/moedas — usada no cadastro de preço combinado
+  server.get('/moedas', async (_request, reply) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT codigo, nome, simbolo, unidades_por_real
+           FROM public.telegas_moedas ORDER BY nome`
+      );
+      return rows.map((r: any) => ({
+        codigo: r.codigo,
+        nome: r.nome,
+        simbolo: r.simbolo,
+        unidadesPorReal: parseFloat(r.unidades_por_real),
+      }));
+    } catch (err) {
+      server.log.error(err);
+      return reply.code(500).send({ error: 'Erro ao buscar moedas' });
+    }
+  });
+
   // GET /api/produtos
   server.get('/', async (request, reply) => {
     const { all } = request.query as any;

@@ -293,6 +293,43 @@ export const api = {
     return res.json();
   },
 
+  getMoedas: async () => {
+    const res = await fetchAuth(`${API_URL}/produtos/moedas`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Erro ao buscar moedas');
+    return res.json();
+  },
+
+  getPrecosDoCliente: async (id: number) => {
+    const res = await fetchAuth(`${API_URL}/clientes/${id}/precos`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Erro ao buscar preços do cliente');
+    return res.json();
+  },
+
+  salvarPrecosDoCliente: async (
+    id: number,
+    precos: { produtoId: number; preco: number; moeda?: string | null }[]
+  ) => {
+    const res = await fetchAuth(`${API_URL}/clientes/${id}/precos`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ precos }),
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error((e as any).error || 'Erro ao salvar preços');
+    }
+    return res.json();
+  },
+
+  excluirPedido: async (id: number) => {
+    const res = await fetchAuth(`${API_URL}/pedidos/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error((e as any).error || 'Erro ao excluir pedido');
+    }
+    return res.json();
+  },
+
   excluirCliente: async (id: number, force?: boolean) => {
     const res = await fetchAuth(`${API_URL}/clientes/${id}${force ? '?force=true' : ''}`, { method: 'DELETE' });
     const data = await res.json().catch(() => ({}));

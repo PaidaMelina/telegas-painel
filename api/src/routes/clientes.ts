@@ -313,6 +313,99 @@ export async function clientesRoutes(server: FastifyInstance) {
     }
   });
 
+  // GET /api/clientes/:id/precos — preços combinados com este cliente
+  server.get<{ Params: { id: string } }>('/:id/precos', async (request, reply) => {
+    const id = parseInt(request.params.id, 10);
+    try {
+      const { rows } = await pool.query(
+        `SELECT pe.produto_id, pe.preco, pe.moeda, pe.observacao,
+                p.nome AS produto_nome, m.simbolo, m.unidades_por_real
+           FROM public.telegas_precos_especiais pe
+           JOIN public.telegas_produtos p ON p.id = pe.produto_id
+           LEFT JOIN public.telegas_moedas m ON m.codigo = pe.moeda
+          WHERE pe.cliente_id = $1 AND pe.ativo
+          ORDER BY p.nome`,
+        [id]
+      );
+      return rows.map((r: any) => ({
+        produtoId: r.produto_id,
+        produtoNome: r.produto_nome,
+        preco: parseFloat(r.preco),
+        moeda: r.moeda,
+        simbolo: r.simbolo,
+        precoBrl: r.moeda && r.unidades_por_real
+          ? Math.round((parseFloat(r.preco) / parseFloat(r.unidades_por_real)) * 100) / 100
+          : parseFloat(r.preco),
+        observacao: r.observacao,
+      }));
+    } catch (err) {
+      server.log.error(err);
+      return reply.code(500).send({ error: 'Erro ao buscar preços do cliente' });
+    }
+  });
+
+  // PUT /api/clientes/:id/precos — substitui a lista, como nas metas
+  server.put<{
+    Params: { id: string };
+    Body: { precos: { produtoId: number; preco: number; moeda?: string | null }[] };
+  }>('/:id/precos', async (request, reply) => {
+    const id = parseInt(request.params.id, 10);
+    const precos = request.body?.precos;
+
+    if (!Array.isArray(precos)) {
+      return reply.code(400).send({ error: 'Envie a lista de preços' });
+    }
+    for (const p of precos) {
+      if (!p.produtoId || !(p.preco > 0)) {
+        return reply.code(400).send({ error: 'Cada preço precisa de produto e valor maior que zero' });
+      }
+    }
+    const ids = precos.map(p => p.produtoId);
+    if (new Set(ids).size !== ids.length) {
+      return reply.code(400).send({ error: 'Há produtos repetidos na lista' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      if (ids.length > 0) {
+        await client.query(
+          `DELETE FROM public.telegas_precos_especiais
+            WHERE cliente_id = $1 AND produto_id <> ALL($2::int[])`,
+          [id, ids]
+        );
+      } else {
+        await client.query(
+          `DELETE FROM public.telegas_precos_especiais WHERE cliente_id = $1`, [id]
+        );
+      }
+
+      for (const p of precos) {
+        await client.query(
+          `INSERT INTO public.telegas_precos_especiais
+             (cliente_id, produto_id, preco, moeda, ativo)
+           VALUES ($1, $2, $3, $4, true)
+           ON CONFLICT (cliente_id, produto_id) WHERE cliente_id IS NOT NULL
+           DO UPDATE SET preco = EXCLUDED.preco,
+                         moeda = EXCLUDED.moeda,
+                         ativo = true,
+                         atualizado_em = NOW()`,
+          [id, p.produtoId, p.preco, p.moeda || null]
+        );
+      }
+
+      await client.query('COMMIT');
+      return { ok: true, total: precos.length };
+    } catch (err: any) {
+      await client.query('ROLLBACK').catch(() => {});
+      server.log.error(err);
+      return reply.code(500).send({ error: `Erro ao salvar preços: ${err.message}` });
+    } finally {
+      client.release();
+    }
+  });
+
   // DELETE /api/clientes/:id
   //
   // telegas_pedidos referencia telegas_clientes(telefone) com ON DELETE CASCADE:
