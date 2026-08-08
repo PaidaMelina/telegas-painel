@@ -67,6 +67,8 @@ export const api = {
     descricao?: string;
     prioridade?: number;
     valorRisco?: number | null;
+    prazo?: string;
+    recorrencia?: string;
   }) => {
     const res = await fetchAuth(`${API_URL}/tarefas`, {
       method: 'POST',

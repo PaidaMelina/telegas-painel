@@ -3,9 +3,24 @@ import { pool } from '../db';
 
 const STATUS_ABERTOS = ['pendente', 'em_andamento', 'adiada'];
 
-const RESULTADOS = ['recuperado', 'sem_sucesso', 'nao_estava', 'perdido', 'engano'];
+const RESULTADOS = [
+  // desfecho de visita a cliente
+  'recuperado', 'sem_sucesso', 'nao_estava', 'perdido', 'engano',
+  // desfecho de tarefa operacional
+  'feito', 'nao_feito', 'nao_necessario',
+];
 const STATUS = ['pendente', 'em_andamento', 'concluida', 'adiada', 'descartada'];
-const TIPOS = ['visita', 'cobranca', 'cadastro', 'follow_up', 'oportunidade', 'outro'];
+const TIPOS = ['visita', 'cobranca', 'cadastro', 'follow_up', 'oportunidade', 'compra', 'operacional', 'outro'];
+const RECORRENCIAS = ['semanal', 'quinzenal', 'mensal'];
+
+/** Próximo prazo de uma tarefa que se repete. */
+function proximoPrazo(prazo: Date, recorrencia: string): Date {
+  const d = new Date(prazo);
+  if (recorrencia === 'semanal')   d.setDate(d.getDate() + 7);
+  if (recorrencia === 'quinzenal') d.setDate(d.getDate() + 14);
+  if (recorrencia === 'mensal')    d.setMonth(d.getMonth() + 1);
+  return d;
+}
 
 export async function tarefasRoutes(server: FastifyInstance) {
   // GET /api/tarefas — lista, com a pauta aberta primeiro
@@ -45,7 +60,16 @@ export async function tarefasRoutes(server: FastifyInstance) {
            LEFT JOIN public.telegas_clientes c ON c.id = t.cliente_id
            LEFT JOIN public.telegas_usuarios u ON u.id = t.criado_por
            ${where}
-          ORDER BY t.prioridade DESC, t.criado_em ASC
+          ORDER BY
+            -- Prazo apertado passa à frente da prioridade: perder as 10h do
+            -- sábado custa a semana, independente de quão importante era.
+            CASE WHEN t.status IN ('pendente','em_andamento')
+                  AND t.prazo IS NOT NULL
+                  AND t.prazo <= NOW() + INTERVAL '2 days'
+                 THEN 0 ELSE 1 END,
+            t.prioridade DESC,
+            t.prazo ASC NULLS LAST,
+            t.criado_em ASC
           LIMIT $${params.length}`,
         params
       );
@@ -99,12 +123,20 @@ export async function tarefasRoutes(server: FastifyInstance) {
     if (b.tipo && !TIPOS.includes(b.tipo)) {
       return reply.code(400).send({ error: 'Tipo inválido' });
     }
+    if (b.recorrencia && !RECORRENCIAS.includes(b.recorrencia)) {
+      return reply.code(400).send({ error: 'Recorrência inválida' });
+    }
+    // Sem prazo não há como calcular a ocorrência seguinte.
+    if (b.recorrencia && !b.prazo) {
+      return reply.code(400).send({ error: 'Tarefa que se repete precisa de prazo' });
+    }
 
     try {
       const { rows } = await pool.query(
         `INSERT INTO public.telegas_tarefas
-           (cliente_id, tipo, origem, titulo, descricao, prioridade, valor_risco, criado_por)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           (cliente_id, tipo, origem, titulo, descricao, prioridade, valor_risco,
+            prazo, recorrencia, criado_por)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING id`,
         [
           b.clienteId || null,
@@ -116,6 +148,8 @@ export async function tarefasRoutes(server: FastifyInstance) {
           b.descricao?.trim() || null,
           Number.isFinite(b.prioridade) ? b.prioridade : 50,
           b.valorRisco ?? null,
+          b.prazo || null,
+          b.recorrencia || null,
           usuario?.id || null,
         ]
       );
@@ -150,13 +184,15 @@ export async function tarefasRoutes(server: FastifyInstance) {
     const params: any[] = [];
     const set = (col: string, val: any) => { params.push(val); sets.push(`${col} = $${params.length}`); };
 
-    if (b.titulo !== undefined)     set('titulo', b.titulo.trim());
-    if (b.descricao !== undefined)  set('descricao', b.descricao?.trim() || null);
-    if (b.tipo !== undefined)       set('tipo', b.tipo);
-    if (b.prioridade !== undefined) set('prioridade', b.prioridade);
-    if (b.observacao !== undefined) set('observacao', b.observacao?.trim() || null);
-    if (b.resultado !== undefined)  set('resultado', b.resultado || null);
-    if (b.adiadaPara !== undefined) set('adiada_para', b.adiadaPara || null);
+    if (b.titulo !== undefined)      set('titulo', b.titulo.trim());
+    if (b.descricao !== undefined)   set('descricao', b.descricao?.trim() || null);
+    if (b.tipo !== undefined)        set('tipo', b.tipo);
+    if (b.prioridade !== undefined)  set('prioridade', b.prioridade);
+    if (b.observacao !== undefined)  set('observacao', b.observacao?.trim() || null);
+    if (b.resultado !== undefined)   set('resultado', b.resultado || null);
+    if (b.prazo !== undefined)       set('prazo', b.prazo || null);
+    if (b.recorrencia !== undefined) set('recorrencia', b.recorrencia || null);
+    if (b.adiadaPara !== undefined)  set('adiada_para', b.adiadaPara || null);
 
     if (b.status !== undefined) {
       set('status', b.status);
@@ -176,7 +212,16 @@ export async function tarefasRoutes(server: FastifyInstance) {
         params
       );
       if (!rows.length) return reply.code(404).send({ error: 'Tarefa não encontrada' });
-      return { ok: true };
+
+      // Rotina que se repete: concluir uma ocorrência abre a seguinte, já com
+      // o próximo prazo. Sem isso o gerente teria que recriar à mão toda
+      // semana, e a que ele esquecesse simplesmente deixaria de existir.
+      let proxima: number | null = null;
+      if (b.status === 'concluida') {
+        proxima = await criarProximaOcorrencia(server, id);
+      }
+
+      return { ok: true, proximaOcorrencia: proxima };
     } catch (err: any) {
       server.log.error({ err, sets, params }, 'Falha ao atualizar tarefa');
 
@@ -215,6 +260,47 @@ export async function tarefasRoutes(server: FastifyInstance) {
   });
 }
 
+/**
+ * Cria a próxima ocorrência de uma tarefa recorrente que acabou de ser
+ * concluída. Devolve o id da nova tarefa, ou null se não havia recorrência.
+ *
+ * Nunca lança: falhar aqui não pode desfazer a conclusão que o usuário já fez.
+ */
+async function criarProximaOcorrencia(
+  server: FastifyInstance,
+  idConcluida: number
+): Promise<number | null> {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM public.telegas_tarefas WHERE id = $1`, [idConcluida]
+    );
+    const t = rows[0];
+    if (!t?.recorrencia || !t.prazo) return null;
+
+    // A rotina é identificada pela primeira ocorrência: assim todas as
+    // repetições apontam para a mesma origem, e não numa corrente longa.
+    const origem = t.recorrencia_de || t.id;
+
+    const { rows: nova } = await pool.query(
+      `INSERT INTO public.telegas_tarefas
+         (cliente_id, tipo, origem, titulo, descricao, prioridade, valor_risco,
+          prazo, recorrencia, recorrencia_de, criado_por)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING id`,
+      [
+        t.cliente_id, t.tipo, t.origem, t.titulo, t.descricao, t.prioridade,
+        t.valor_risco,
+        proximoPrazo(new Date(t.prazo), t.recorrencia),
+        t.recorrencia, origem, t.criado_por,
+      ]
+    );
+    return nova[0].id;
+  } catch (err) {
+    server.log.error(err, 'Falha ao criar próxima ocorrência da tarefa');
+    return null;
+  }
+}
+
 function serializar(r: any) {
   return {
     id: r.id,
@@ -234,6 +320,9 @@ function serializar(r: any) {
     status: r.status,
     resultado: r.resultado,
     observacao: r.observacao,
+    prazo: r.prazo,
+    recorrencia: r.recorrencia,
+    recorrenciaDe: r.recorrencia_de,
     adiadaPara: r.adiada_para,
     criadoPorNome: r.criado_por_nome,
     criadoEm: r.criado_em,

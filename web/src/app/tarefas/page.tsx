@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/lib/api';
 import {
   ClipboardList, Plus, X, MapPin, Phone, CalendarClock,
-  AlertTriangle, Bot, User, Search, Trash2, GripVertical, Ban,
+  AlertTriangle, Bot, User, Search, Trash2, GripVertical, Ban, Clock, Repeat,
 } from 'lucide-react';
 
 interface Tarefa {
@@ -25,6 +25,9 @@ interface Tarefa {
   status: string;
   resultado: string | null;
   observacao: string | null;
+  prazo: string | null;
+  recorrencia: string | null;
+  recorrenciaDe: number | null;
   adiadaPara: string | null;
   criadoPorNome: string | null;
   criadoEm: string;
@@ -42,22 +45,69 @@ const COLUNAS = [
 // que está acima da capacidade — uma pauta que não cabe na semana não é pauta.
 const CAPACIDADE_SEMANAL = 10;
 
+// `cliente` = a tarefa é uma abordagem a alguém da carteira, e o desfecho
+// interessa para medir recuperação. `operacional` = rotina interna, onde o que
+// importa é se foi feita. Cada grupo tem seus próprios resultados.
 const TIPOS = [
-  { id: 'visita',       label: 'Visita' },
-  { id: 'cobranca',     label: 'Cobrança' },
-  { id: 'cadastro',     label: 'Cadastro' },
-  { id: 'follow_up',    label: 'Retorno' },
-  { id: 'oportunidade', label: 'Oportunidade' },
-  { id: 'outro',        label: 'Outro' },
-];
+  { id: 'visita',       label: 'Visita a cliente',   grupo: 'cliente' },
+  { id: 'cobranca',     label: 'Cobrança',           grupo: 'cliente' },
+  { id: 'follow_up',    label: 'Retorno / contato',  grupo: 'cliente' },
+  { id: 'oportunidade', label: 'Oportunidade',       grupo: 'cliente' },
+  { id: 'compra',       label: 'Pedido a fornecedor',grupo: 'operacional' },
+  { id: 'operacional',  label: 'Rotina interna',     grupo: 'operacional' },
+  { id: 'cadastro',     label: 'Cadastro',           grupo: 'operacional' },
+  { id: 'outro',        label: 'Outro',              grupo: 'operacional' },
+] as const;
 
-const RESULTADOS = [
+const RESULTADOS_CLIENTE = [
   { id: 'recuperado',  label: 'Resolvido — voltou a comprar', cor: '#047857' },
-  { id: 'sem_sucesso', label: 'Visitei, sem resultado',       cor: '#c27803' },
+  { id: 'sem_sucesso', label: 'Falei, sem resultado',         cor: '#c27803' },
   { id: 'nao_estava',  label: 'Não encontrei / fechado',      cor: '#4a5568' },
   { id: 'perdido',     label: 'Perdido para concorrente',     cor: '#c81e1e' },
   { id: 'engano',      label: 'Alarme falso',                 cor: '#4a5568' },
 ];
+
+const RESULTADOS_OPERACIONAL = [
+  { id: 'feito',           label: 'Feito',                     cor: '#047857' },
+  { id: 'nao_feito',       label: 'Não deu — perdi o prazo',   cor: '#c81e1e' },
+  { id: 'nao_necessario',  label: 'Não foi necessário',        cor: '#4a5568' },
+];
+
+/** Todos, para exibir o rótulo de uma tarefa já concluída. */
+const RESULTADOS = [...RESULTADOS_CLIENTE, ...RESULTADOS_OPERACIONAL];
+
+function grupoDoTipo(tipo: string) {
+  return TIPOS.find(t => t.id === tipo)?.grupo ?? 'operacional';
+}
+
+function resultadosPara(tipo: string) {
+  return grupoDoTipo(tipo) === 'cliente' ? RESULTADOS_CLIENTE : RESULTADOS_OPERACIONAL;
+}
+
+const RECORRENCIAS = [
+  { id: '',          label: 'Não repete' },
+  { id: 'semanal',   label: 'Toda semana' },
+  { id: 'quinzenal', label: 'A cada 15 dias' },
+  { id: 'mensal',    label: 'Todo mês' },
+];
+
+/** Quão urgente é o prazo, para colorir o cartão. */
+function situacaoPrazo(prazo: string | null): { texto: string; cor: string } | null {
+  if (!prazo) return null;
+  const d = new Date(prazo);
+  const agora = new Date();
+  const horas = (d.getTime() - agora.getTime()) / 3600000;
+
+  const quando = d.toLocaleString('pt-BR', {
+    weekday: 'short', day: '2-digit', month: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  });
+
+  if (horas < 0)  return { texto: `venceu ${quando}`, cor: '#c81e1e' };
+  if (horas < 24) return { texto: `vence ${quando}`,  cor: '#c81e1e' };
+  if (horas < 72) return { texto: quando,             cor: '#c27803' };
+  return { texto: quando, cor: 'var(--text-muted)' };
+}
 
 function corPrioridade(p: number) {
   if (p >= 75) return '#c81e1e';
@@ -87,7 +137,10 @@ export default function TarefasPage() {
 
   // Criação
   const [criando, setCriando] = useState(false);
-  const [form, setForm] = useState({ titulo: '', descricao: '', tipo: 'visita', prioridade: 50 });
+  const [form, setForm] = useState({
+    titulo: '', descricao: '', tipo: 'visita', prioridade: 50,
+    prazo: '', recorrencia: '',
+  });
   const [buscaCliente, setBuscaCliente] = useState('');
   const [clientesEncontrados, setClientesEncontrados] = useState<any[]>([]);
   const [clienteEscolhido, setClienteEscolhido] = useState<any>(null);
@@ -208,7 +261,7 @@ export default function TarefasPage() {
   }
 
   function abrirCriacao() {
-    setForm({ titulo: '', descricao: '', tipo: 'visita', prioridade: 50 });
+    setForm({ titulo: '', descricao: '', tipo: 'visita', prioridade: 50, prazo: '', recorrencia: '' });
     setClienteEscolhido(null);
     setBuscaCliente('');
     setErroForm('');
@@ -217,6 +270,10 @@ export default function TarefasPage() {
 
   async function salvarTarefa() {
     if (!form.titulo.trim()) { setErroForm('Escreva o que precisa ser feito.'); return; }
+    if (form.recorrencia && !form.prazo) {
+      setErroForm('Tarefa que se repete precisa de prazo — é a partir dele que a próxima é criada.');
+      return;
+    }
     setSalvando(true);
     setErroForm('');
     try {
@@ -226,6 +283,8 @@ export default function TarefasPage() {
         tipo: form.tipo,
         prioridade: form.prioridade,
         clienteId: clienteEscolhido?.id ?? null,
+        prazo: form.prazo || undefined,
+        recorrencia: form.recorrencia || undefined,
       });
       setCriando(false);
       carregar();
@@ -474,9 +533,44 @@ export default function TarefasPage() {
               <label style={labelStyle}>Tipo</label>
               <select style={{ ...inputStyle, cursor: 'pointer' }} value={form.tipo}
                 onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))}>
-                {TIPOS.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+                <optgroup label="Cliente">
+                  {TIPOS.filter(t => t.grupo === 'cliente').map(t => (
+                    <option key={t.id} value={t.id}>{t.label}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Interno">
+                  {TIPOS.filter(t => t.grupo === 'operacional').map(t => (
+                    <option key={t.id} value={t.id}>{t.label}</option>
+                  ))}
+                </optgroup>
               </select>
+              <p style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginTop: 5, lineHeight: 1.5 }}>
+                {grupoDoTipo(form.tipo) === 'cliente'
+                  ? 'Ao concluir, você registra o desfecho com o cliente.'
+                  : 'Ao concluir, você registra apenas se foi feita.'}
+              </p>
             </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ flex: 1.3 }}>
+                <label style={labelStyle}>Prazo</label>
+                <input type="datetime-local" style={inputStyle} value={form.prazo}
+                  onChange={e => setForm(f => ({ ...f, prazo: e.target.value }))} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Repetir</label>
+                <select style={{ ...inputStyle, cursor: 'pointer' }} value={form.recorrencia}
+                  onChange={e => setForm(f => ({ ...f, recorrencia: e.target.value }))}>
+                  {RECORRENCIAS.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+                </select>
+              </div>
+            </div>
+            {form.recorrencia && (
+              <p style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'var(--font-space-mono)', lineHeight: 1.55, background: 'var(--bg-surface-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 12px', marginTop: -8 }}>
+                Ao concluir esta tarefa, a próxima é criada automaticamente com o
+                prazo seguinte. Você não precisa recadastrar toda semana.
+              </p>
+            )}
 
             <div>
               <label style={labelStyle}>Prioridade: {form.prioridade}</label>
@@ -533,11 +627,20 @@ export default function TarefasPage() {
             {concluindo.titulo}
           </p>
 
+          {modo === 'concluir' && concluindo.recorrencia && (
+            <p style={{ fontSize: 11.5, color: '#1e3fa8', fontFamily: 'var(--font-space-mono)', lineHeight: 1.5, background: '#ebf1fe', border: '1px solid #a5bcf7', borderRadius: 6, padding: '10px 12px', marginBottom: 16 }}>
+              Tarefa que se repete: ao concluir, a próxima aparece no quadro com
+              o prazo seguinte.
+            </p>
+          )}
+
           {modo === 'concluir' ? (
             <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>O que aconteceu? *</label>
+              <label style={labelStyle}>
+                {grupoDoTipo(concluindo.tipo) === 'cliente' ? 'O que aconteceu? *' : 'Foi feita? *'}
+              </label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {RESULTADOS.map(r => (
+                {resultadosPara(concluindo.tipo).map(r => (
                   <button key={r.id} onClick={() => setResultado(r.id)} style={{
                     display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left',
                     padding: '10px 12px', borderRadius: 6, cursor: 'pointer',
@@ -649,6 +752,7 @@ function Cartao({ t, arrastando, onDragStart, onDragEnd, onExcluir, onMover }: {
 }) {
   const res = RESULTADOS.find(r => r.id === t.resultado);
   const encerrada = t.status === 'concluida' || t.status === 'descartada';
+  const prazo = situacaoPrazo(t.prazo);
 
   return (
     <article
@@ -693,6 +797,22 @@ function Cartao({ t, arrastando, onDragStart, onDragEnd, onExcluir, onMover }: {
       {t.valorRisco !== null && (
         <p style={{ fontSize: 10, color: '#c81e1e', fontFamily: 'var(--font-space-mono)', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
           <AlertTriangle size={9} /> {moeda(t.valorRisco)}/mês
+        </p>
+      )}
+
+      {!encerrada && prazo && (
+        <p style={{
+          fontSize: 10, color: prazo.cor, fontFamily: 'var(--font-space-mono)',
+          display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3,
+          fontWeight: prazo.cor === '#c81e1e' ? 700 : 400,
+        }}>
+          <Clock size={9} /> {prazo.texto}
+        </p>
+      )}
+
+      {t.recorrencia && (
+        <p style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <Repeat size={9} /> {RECORRENCIAS.find(r => r.id === t.recorrencia)?.label.toLowerCase()}
         </p>
       )}
 
