@@ -157,8 +157,16 @@ export async function portariaRoutes(server: FastifyInstance) {
         const listaProdutos = produtos
           .map((p: any) => `${p.qtd}x ${p.nome} (R$${parseFloat(p.preco).toFixed(2)})`)
           .join('\n');
-        const pagMap: Record<string, string> = { pix: 'PIX', dinheiro: 'Dinheiro', cartao: 'Cartão' };
-        const pagLabel = pagMap[(formaPagamento || '').toLowerCase()] || formaPagamento || 'Não informado';
+        // O rótulo vem do cadastro, não de um mapa fixo: formas novas (Pesos,
+        // Cartão de Débito) apareceriam como o slug cru na mensagem.
+        let pagLabel = formaPagamento || 'Não informado';
+        if (formaPagamento) {
+          const { rows: fp } = await pool.query(
+            `SELECT nome FROM public.telegas_formas_pagamento WHERE slug = $1`,
+            [String(formaPagamento).toLowerCase()]
+          );
+          if (fp.length) pagLabel = fp[0].nome;
+        }
         const trocoMsg = trocoPara ? ` | Troco para: R$${parseFloat(trocoPara).toFixed(2)}` : '';
         const texto = `*Novo pedido #${pedidoId}* (Portaria)\n\nCliente: ${nome || tel}\nProdutos:\n${listaProdutos}\nTotal: R$${total.toFixed(2)}\nEndereço: ${endereco || 'Não informado'}${bairro ? ' - ' + bairro : ''}\nPagamento: ${pagLabel}${trocoMsg}\n\nResponda ACEITAR ou RECUSAR`;
 

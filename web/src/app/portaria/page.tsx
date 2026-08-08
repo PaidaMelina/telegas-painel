@@ -29,7 +29,13 @@ interface ItemCarrinho {
   qtd: number;
 }
 
-const PAGAMENTOS = ['Dinheiro', 'PIX', 'Cartão'];
+interface FormaPagamento {
+  id: number;
+  nome: string;
+  slug: string;
+  aceitaTroco: boolean;
+  ativo?: boolean;
+}
 
 function formatPhone(v: string): string {
   const d = v.replace(/\D/g, '');
@@ -60,7 +66,8 @@ export default function PortariaPage() {
   // Produtos e carrinho
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [carrinho, setCarrinho] = useState<Record<number, ItemCarrinho>>({});
-  const [pagamento, setPagamento] = useState('Dinheiro');
+  const [formasPagamento, setFormasPagamento] = useState<FormaPagamento[]>([]);
+  const [pagamento, setPagamento] = useState<FormaPagamento | null>(null);
   const [troco, setTroco] = useState('');
   const [submetendo, setSubmetendo] = useState(false);
   const [pedidoId, setPedidoId] = useState<number | null>(null);
@@ -74,6 +81,17 @@ export default function PortariaPage() {
     api.getProdutos()
       .then(setProdutos)
       .catch(() => {});
+  }, []);
+
+  // Formas de pagamento vêm do cadastro. A primeira ativa fica pré-selecionada.
+  useEffect(() => {
+    api.getFormasPagamento()
+      .then((res: FormaPagamento[]) => {
+        const ativas = res.filter(f => f.ativo !== false);
+        setFormasPagamento(ativas);
+        setPagamento(p => p ?? ativas[0] ?? null);
+      })
+      .catch(err => console.error('Falha ao carregar formas de pagamento:', err));
   }, []);
 
   // Buscar entregadores ao entrar na tela de pedido
@@ -166,8 +184,8 @@ export default function PortariaPage() {
         endereco: clienteSelecionado.endereco,
         bairro: clienteSelecionado.bairro,
         produtos: itens.map(i => ({ id: i.produto.id, nome: i.produto.nome, qtd: i.qtd, preco: i.produto.preco })),
-        formaPagamento: pagamento.toLowerCase(),
-        trocoPara: pagamento === 'Dinheiro' && troco ? parseFloat(troco) : null,
+        formaPagamento: pagamento?.slug ?? '',
+        trocoPara: pagamento?.aceitaTroco && troco ? parseFloat(troco) : null,
         entregadorId: entregadorSelecionado,
       });
       setPedidoId(d.pedidoId);
@@ -182,7 +200,7 @@ export default function PortariaPage() {
     setStep('cliente');
     setClienteSelecionado(null);
     setCarrinho({});
-    setPagamento('Dinheiro');
+    setPagamento(formasPagamento[0] ?? null);
     setTroco('');
     setPedidoId(null);
     setBusca('');
@@ -530,24 +548,33 @@ export default function PortariaPage() {
             {/* Pagamento */}
             <div>
               <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 8px', fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Pagamento</p>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {PAGAMENTOS.map(p => (
+              {/* Vem do cadastro de Pagamentos: formas novas aparecem aqui
+                  sozinhas, sem precisar mexer no código. */}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {formasPagamento.length === 0 ? (
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', fontStyle: 'italic' }}>
+                    Nenhuma forma de pagamento ativa — cadastre em Pagamentos.
+                  </p>
+                ) : formasPagamento.map(p => (
                   <button
-                    key={p}
+                    key={p.id}
                     onClick={() => setPagamento(p)}
                     style={{
-                      flex: 1, padding: '7px 4px', border: `1px solid ${pagamento === p ? 'var(--accent)' : 'var(--border)'}`,
-                      borderRadius: 7, background: pagamento === p ? 'var(--accent-dim)' : 'var(--bg-surface-2)',
-                      color: pagamento === p ? 'var(--accent)' : 'var(--text-secondary)',
+                      flex: '1 1 auto', minWidth: 88, padding: '7px 10px',
+                      border: `1px solid ${pagamento?.id === p.id ? 'var(--accent)' : 'var(--border)'}`,
+                      borderRadius: 7, background: pagamento?.id === p.id ? 'var(--accent-dim)' : 'var(--bg-surface-2)',
+                      color: pagamento?.id === p.id ? 'var(--accent)' : 'var(--text-secondary)',
                       fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-space-mono)',
                       transition: 'all 0.15s',
                     }}
-                  >{p}</button>
+                  >{p.nome}</button>
                 ))}
               </div>
             </div>
 
-            {pagamento === 'Dinheiro' && (
+            {/* Troco segue a marcação do cadastro, em vez de presumir que só
+                dinheiro aceita — pagamento em pesos também precisa. */}
+            {pagamento?.aceitaTroco && (
               <div>
                 <label style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 5 }}>
                   Troco para (opcional)
