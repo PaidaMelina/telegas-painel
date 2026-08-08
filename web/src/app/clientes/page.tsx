@@ -47,6 +47,34 @@ interface MetaForm {
   quantidadeSemanal: string;
 }
 
+// O banco guarda um único campo de endereço, com número e complemento já
+// embutidos — é assim que a Portaria grava, e é a forma que chega pronta ao
+// entregador e à mensagem do WhatsApp. A tela separa os campos só para digitar.
+function juntarEndereco(rua: string, numero: string, complemento: string) {
+  const base = rua.trim();
+  if (!base) return '';
+  const comNumero = numero.trim() ? `${base}, ${numero.trim()}` : base;
+  return complemento.trim() ? `${comNumero} - ${complemento.trim()}` : comNumero;
+}
+
+/** Desfaz `juntarEndereco` para preencher o formulário ao editar. */
+function separarEndereco(completo: string | null) {
+  const texto = (completo || '').trim();
+  if (!texto) return { rua: '', numero: '', complemento: '' };
+
+  // "Rua X, 123 - fundos" → rua / número / complemento.
+  // Aceita também "s/n", usual em galpão e estrada, que de outro modo cairia
+  // no caso abaixo e jogaria o endereço inteiro no campo da rua.
+  // O `-?[A-Za-z]` colado ao número cobre "1020-A" sem confundir com o hífen
+  // que separa o complemento, que sempre vem com espaço ("522 - fundos").
+  const m = texto.match(/^(.*?),\s*(\d+(?:-?[A-Za-z])?|[sS]\/?[nN])\s*(?:-\s*(.*))?$/);
+  if (m) return { rua: m[1].trim(), numero: m[2].trim(), complemento: (m[3] || '').trim() };
+
+  // Sem número reconhecível, o texto inteiro é a rua: melhor deixar o usuário
+  // corrigir do que adivinhar errado e perder parte do endereço.
+  return { rua: texto, numero: '', complemento: '' };
+}
+
 function etiquetaStyle(id: string) {
   return ETIQUETAS.find(e => e.id === id) || { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' };
 }
@@ -104,7 +132,7 @@ export default function ClientesPage() {
   // Drawer — serve tanto para editar (editTarget) quanto para cadastrar (creating)
   const [editTarget, setEditTarget] = useState<Cliente | null>(null);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ telefone: '', nome: '', endereco: '', bairro: '', etiquetas: [] as string[] });
+  const [form, setForm] = useState({ telefone: '', nome: '', endereco: '', numero: '', complemento: '', bairro: '', etiquetas: [] as string[] });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const drawerOpen = creating || !!editTarget;
@@ -181,10 +209,13 @@ export default function ClientesPage() {
   function openEdit(c: Cliente) {
     setCreating(false);
     setEditTarget(c);
+    const partes = separarEndereco(c.endereco);
     setForm({
       telefone: c.telefone,
       nome: c.nome || '',
-      endereco: c.endereco || '',
+      endereco: partes.rua,
+      numero: partes.numero,
+      complemento: partes.complemento,
       bairro: c.bairro || '',
       etiquetas: [...(c.etiquetas || [])],
     });
@@ -201,7 +232,7 @@ export default function ClientesPage() {
   function openCreate() {
     setEditTarget(null);
     setCreating(true);
-    setForm({ telefone: '', nome: '', endereco: '', bairro: '', etiquetas: [] });
+    setForm({ telefone: '', nome: '', endereco: '', numero: '', complemento: '', bairro: '', etiquetas: [] });
     setFormError('');
     setMetas([]);
   }
@@ -283,10 +314,11 @@ export default function ClientesPage() {
           setFormError('Informe o telefone com DDD. Ex: (53) 98424-0283');
           return;
         }
+        const enderecoCompleto = juntarEndereco(form.endereco, form.numero, form.complemento);
         await api.criarCliente({
           telefone,
           nome: form.nome.trim(),
-          endereco: form.endereco.trim() || undefined,
+          endereco: enderecoCompleto || undefined,
           bairro: form.bairro.trim() || undefined,
         });
         // criarCliente devolve só o cadastro básico; etiquetas e metas
@@ -315,7 +347,7 @@ export default function ClientesPage() {
       if (!editTarget) return;
       await api.atualizarCliente(editTarget.id, {
         nome: form.nome || undefined,
-        endereco: form.endereco || undefined,
+        endereco: juntarEndereco(form.endereco, form.numero, form.complemento) || undefined,
         bairro: form.bairro || undefined,
         etiquetas: form.etiquetas,
       });
@@ -750,24 +782,47 @@ export default function ClientesPage() {
             </div>
 
             <div>
-              <label style={labelStyle}>Endereço</label>
+              <label style={labelStyle}>Rua</label>
               <BuscaEndereco
                 value={form.endereco}
                 onChange={valor => setForm(f => ({ ...f, endereco: valor }))}
-                // Escolher da lista preenche o bairro junto e marca o país,
-                // que é o que distingue as revendas do lado uruguaio.
+                // Escolher da lista preenche número e bairro junto, e marca o
+                // país — que é o que distingue as revendas do lado uruguaio.
                 onSelect={s => setForm(f => ({
                   ...f,
-                  endereco: s.numero ? `${s.rua}, ${s.numero}` : s.rua,
+                  endereco: s.rua,
+                  numero: s.numero || f.numero,
                   bairro: s.bairro || s.cidade || f.bairro,
                   etiquetas: s.uruguai && !f.etiquetas.includes('Uruguai')
                     ? [...f.etiquetas, 'Uruguai']
                     : f.etiquetas,
                 }))}
-                ariaLabel="Endereço do cliente"
+                ariaLabel="Rua do cliente"
                 inputStyle={inputStyle}
                 placeholder="Digite a rua (Jaguarão ou Rio Branco)"
               />
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ width: 96, flexShrink: 0 }}>
+                <label style={labelStyle}>Número</label>
+                <input
+                  style={inputStyle}
+                  value={form.numero}
+                  onChange={e => setForm(f => ({ ...f, numero: e.target.value }))}
+                  placeholder="326"
+                  inputMode="numeric"
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Complemento</label>
+                <input
+                  style={inputStyle}
+                  value={form.complemento}
+                  onChange={e => setForm(f => ({ ...f, complemento: e.target.value }))}
+                  placeholder="Sala, fundos, esquina..."
+                />
+              </div>
             </div>
 
             <div>
@@ -779,6 +834,16 @@ export default function ClientesPage() {
                 placeholder="Bairro"
               />
             </div>
+
+            {juntarEndereco(form.endereco, form.numero, form.complemento) && (
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', lineHeight: 1.5, background: 'var(--bg-surface-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '9px 11px', marginTop: -8 }}>
+                Vai ser entregue como:{' '}
+                <span style={{ color: 'var(--text-secondary)', fontWeight: 700 }}>
+                  {juntarEndereco(form.endereco, form.numero, form.complemento)}
+                  {form.bairro && `, ${form.bairro}`}
+                </span>
+              </p>
+            )}
 
             {/* Etiquetas */}
             <div>
