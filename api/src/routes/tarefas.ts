@@ -13,13 +13,24 @@ const STATUS = ['pendente', 'em_andamento', 'concluida', 'adiada', 'descartada']
 const TIPOS = ['visita', 'cobranca', 'cadastro', 'follow_up', 'oportunidade', 'compra', 'operacional', 'outro'];
 const RECORRENCIAS = ['semanal', 'quinzenal', 'mensal'];
 
-/** Próximo prazo de uma tarefa que se repete. */
-function proximoPrazo(prazo: Date, recorrencia: string): Date {
-  const d = new Date(prazo);
+/**
+ * Próximo prazo de uma tarefa que se repete.
+ *
+ * Trabalha com texto na entrada e na saída, tratando o valor como horário de
+ * parede: "sábado às 10h" continua sendo 10h na semana seguinte. Converter
+ * para Date e de volta faria o horário escorregar conforme o fuso do processo,
+ * e ainda mudaria sozinho na virada do horário de verão.
+ */
+function proximoPrazo(prazoIso: string, recorrencia: string): string {
+  const d = new Date(prazoIso);
   if (recorrencia === 'semanal')   d.setDate(d.getDate() + 7);
   if (recorrencia === 'quinzenal') d.setDate(d.getDate() + 14);
   if (recorrencia === 'mensal')    d.setMonth(d.getMonth() + 1);
-  return d;
+
+  // Remonta a partir dos componentes locais, sem marcação de fuso.
+  const dd = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${dd(d.getMonth() + 1)}-${dd(d.getDate())}`
+       + `T${dd(d.getHours())}:${dd(d.getMinutes())}:${dd(d.getSeconds())}`;
 }
 
 export async function tarefasRoutes(server: FastifyInstance) {
@@ -198,7 +209,13 @@ export async function tarefasRoutes(server: FastifyInstance) {
       set('status', b.status);
       // Sair de "concluída" tem que limpar a data, senão o resumo semanal
       // continua contando uma tarefa que voltou a ficar aberta.
-      set('concluida_em', b.status === 'concluida' ? new Date() : null);
+      // NOW() do banco, não new Date() do Node: a conexão está no fuso de
+      // operação, então é ele que dá o horário coerente com o resto da tabela.
+      if (b.status === 'concluida') {
+        sets.push('concluida_em = NOW()');
+      } else {
+        set('concluida_em', null);
+      }
       if (b.status !== 'adiada') set('adiada_para', null);
     }
 
@@ -290,7 +307,7 @@ async function criarProximaOcorrencia(
       [
         t.cliente_id, t.tipo, t.origem, t.titulo, t.descricao, t.prioridade,
         t.valor_risco,
-        proximoPrazo(new Date(t.prazo), t.recorrencia),
+        proximoPrazo(String(t.prazo), t.recorrencia),
         t.recorrencia, origem, t.criado_por,
       ]
     );
