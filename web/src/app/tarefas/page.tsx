@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/lib/api';
 import {
-  ClipboardList, Plus, X, MapPin, Phone, Check, Clock, CalendarClock,
-  Ban, AlertTriangle, Bot, User, Search, Trash2,
+  ClipboardList, Plus, X, MapPin, Phone, CalendarClock,
+  AlertTriangle, Bot, User, Search, Trash2, GripVertical, Ban,
 } from 'lucide-react';
 
 interface Tarefa {
@@ -30,84 +30,96 @@ interface Tarefa {
   criadoEm: string;
 }
 
-// Quantas cabem numa semana de trabalho. O que passar disso fica abaixo da
-// linha, visível mas fora da pauta — uma lista que nunca esvazia deixa de ser
-// lista de tarefas e vira ruído de fundo.
-const PAUTA_SEMANAL = 10;
+/** As colunas do quadro, na ordem em que o trabalho anda. */
+const COLUNAS = [
+  { id: 'pendente',     titulo: 'A Fazer',      cor: '#4a5568', descricao: 'aguardando' },
+  { id: 'em_andamento', titulo: 'Em Andamento', cor: '#2557e7', descricao: 'começou' },
+  { id: 'adiada',       titulo: 'Adiadas',      cor: '#c27803', descricao: 'voltam na data' },
+  { id: 'concluida',    titulo: 'Concluídas',   cor: '#047857', descricao: 'esta semana' },
+] as const;
+
+// Quantas visitas cabem numa semana. Passando disso, a coluna "A Fazer" avisa
+// que está acima da capacidade — uma pauta que não cabe na semana não é pauta.
+const CAPACIDADE_SEMANAL = 10;
 
 const TIPOS = [
-  { id: 'visita',      label: 'Visita' },
-  { id: 'cobranca',    label: 'Cobrança' },
-  { id: 'cadastro',    label: 'Cadastro' },
-  { id: 'follow_up',   label: 'Retorno' },
-  { id: 'oportunidade',label: 'Oportunidade' },
-  { id: 'outro',       label: 'Outro' },
+  { id: 'visita',       label: 'Visita' },
+  { id: 'cobranca',     label: 'Cobrança' },
+  { id: 'cadastro',     label: 'Cadastro' },
+  { id: 'follow_up',    label: 'Retorno' },
+  { id: 'oportunidade', label: 'Oportunidade' },
+  { id: 'outro',        label: 'Outro' },
 ];
 
 const RESULTADOS = [
   { id: 'recuperado',  label: 'Resolvido — voltou a comprar', cor: '#047857' },
-  { id: 'sem_sucesso', label: 'Visitei, sem resultado',        cor: '#c27803' },
-  { id: 'nao_estava',  label: 'Não encontrei / fechado',       cor: '#4a5568' },
-  { id: 'perdido',     label: 'Perdido para concorrente',      cor: '#c81e1e' },
-  { id: 'engano',      label: 'Alarme falso',                  cor: '#4a5568' },
+  { id: 'sem_sucesso', label: 'Visitei, sem resultado',       cor: '#c27803' },
+  { id: 'nao_estava',  label: 'Não encontrei / fechado',      cor: '#4a5568' },
+  { id: 'perdido',     label: 'Perdido para concorrente',     cor: '#c81e1e' },
+  { id: 'engano',      label: 'Alarme falso',                 cor: '#4a5568' },
 ];
 
 function corPrioridade(p: number) {
   if (p >= 75) return '#c81e1e';
   if (p >= 50) return '#c27803';
-  return '#4a5568';
+  return '#9aa5b4';
 }
 
 function moeda(v: number | null) {
   if (v === null) return null;
-  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+}
+
+function dataCurta(iso: string | null) {
+  if (!iso) return null;
+  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 
 export default function TarefasPage() {
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
   const [resumo, setResumo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [filtro, setFiltro] = useState<'abertas' | 'concluida' | 'todas'>('abertas');
+  const [erroAcao, setErroAcao] = useState('');
+
+  // Arraste entre colunas
+  const [arrastando, setArrastando] = useState<Tarefa | null>(null);
+  const [colunaAlvo, setColunaAlvo] = useState<string | null>(null);
 
   // Criação
   const [criando, setCriando] = useState(false);
-  const [form, setForm] = useState({ titulo: '', descricao: '', tipo: 'visita', prioridade: 50, clienteId: null as number | null });
+  const [form, setForm] = useState({ titulo: '', descricao: '', tipo: 'visita', prioridade: 50 });
   const [buscaCliente, setBuscaCliente] = useState('');
   const [clientesEncontrados, setClientesEncontrados] = useState<any[]>([]);
   const [clienteEscolhido, setClienteEscolhido] = useState<any>(null);
   const [salvando, setSalvando] = useState(false);
   const [erroForm, setErroForm] = useState('');
 
-  // Conclusão
-  // Erro de ação (iniciar, descartar, excluir). Antes ia só para o console, e
-  // uma falha no banco aparecia para o usuário como "o botão não faz nada".
-  const [erroAcao, setErroAcao] = useState('');
-  const [excluindo, setExcluindo] = useState<Tarefa | null>(null);
-
+  // Conclusão / adiamento
   const [concluindo, setConcluindo] = useState<Tarefa | null>(null);
+  const [modo, setModo] = useState<'concluir' | 'adiar'>('concluir');
   const [resultado, setResultado] = useState('');
   const [observacao, setObservacao] = useState('');
   const [adiarAte, setAdiarAte] = useState('');
-  const [modo, setModo] = useState<'concluir' | 'adiar'>('concluir');
   const [erroConclusao, setErroConclusao] = useState('');
 
-  const carregar = useCallback(async (f: string) => {
-    setLoading(true);
+  const [excluindo, setExcluindo] = useState<Tarefa | null>(null);
+
+  const carregar = useCallback(async () => {
     try {
       const [t, r] = await Promise.all([
-        api.getTarefas(f),
+        api.getTarefas('todas'),
         api.getTarefasResumo().catch(() => null),
       ]);
       setTarefas(t);
       setResumo(r);
-    } catch (e) {
-      console.error('Falha ao carregar tarefas:', e);
+    } catch (e: any) {
+      setErroAcao(e.message || 'Não foi possível carregar as tarefas.');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { carregar(filtro); }, [filtro, carregar]);
+  useEffect(() => { carregar(); }, [carregar]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -127,32 +139,28 @@ export default function TarefasPage() {
     return () => clearTimeout(t);
   }, [buscaCliente]);
 
-  function abrirCriacao() {
-    setForm({ titulo: '', descricao: '', tipo: 'visita', prioridade: 50, clienteId: null });
-    setClienteEscolhido(null);
-    setBuscaCliente('');
-    setErroForm('');
-    setCriando(true);
-  }
+  // ── Movimentação ────────────────────────────────────────────────────────
+  //
+  // Concluir e adiar exigem informação extra (o que aconteceu / para quando),
+  // então soltar o cartão nessas colunas abre o formulário em vez de mover
+  // direto. As outras transições são imediatas.
+  async function moverPara(t: Tarefa, status: string) {
+    if (t.status === status) return;
 
-  async function salvarTarefa() {
-    if (!form.titulo.trim()) { setErroForm('Escreva o que precisa ser feito.'); return; }
-    setSalvando(true);
-    setErroForm('');
+    if (status === 'concluida') { abrirConclusao(t, 'concluir'); return; }
+    if (status === 'adiada')    { abrirConclusao(t, 'adiar');    return; }
+
+    setErroAcao('');
+    // Atualização otimista: o cartão muda de coluna na hora, e volta ao lugar
+    // se o servidor recusar. Sem isso o arraste parece não ter efeito.
+    const anterior = tarefas;
+    setTarefas(ts => ts.map(x => x.id === t.id ? { ...x, status } : x));
     try {
-      await api.criarTarefa({
-        titulo: form.titulo,
-        descricao: form.descricao || undefined,
-        tipo: form.tipo,
-        prioridade: form.prioridade,
-        clienteId: clienteEscolhido?.id ?? null,
-      });
-      setCriando(false);
-      carregar(filtro);
+      await api.atualizarTarefa(t.id, { status });
+      carregar();
     } catch (e: any) {
-      setErroForm(e.message || 'Erro ao criar tarefa');
-    } finally {
-      setSalvando(false);
+      setTarefas(anterior);
+      setErroAcao(e.message || 'Não foi possível mover a tarefa.');
     }
   }
 
@@ -180,19 +188,9 @@ export default function TarefasPage() {
         ? { status: 'concluida', resultado, observacao }
         : { status: 'adiada', adiadaPara: adiarAte, observacao });
       setConcluindo(null);
-      carregar(filtro);
+      carregar();
     } catch (e: any) {
       setErroConclusao(e.message || 'Erro ao salvar');
-    }
-  }
-
-  async function mudarStatus(t: Tarefa, status: string) {
-    setErroAcao('');
-    try {
-      await api.atualizarTarefa(t.id, { status });
-      carregar(filtro);
-    } catch (e: any) {
-      setErroAcao(e.message || 'Não foi possível atualizar a tarefa.');
     }
   }
 
@@ -202,10 +200,39 @@ export default function TarefasPage() {
     try {
       await api.excluirTarefa(excluindo.id);
       setExcluindo(null);
-      carregar(filtro);
+      carregar();
     } catch (e: any) {
-      setErroAcao(e.message || 'Não foi possível excluir a tarefa.');
       setExcluindo(null);
+      setErroAcao(e.message || 'Não foi possível excluir a tarefa.');
+    }
+  }
+
+  function abrirCriacao() {
+    setForm({ titulo: '', descricao: '', tipo: 'visita', prioridade: 50 });
+    setClienteEscolhido(null);
+    setBuscaCliente('');
+    setErroForm('');
+    setCriando(true);
+  }
+
+  async function salvarTarefa() {
+    if (!form.titulo.trim()) { setErroForm('Escreva o que precisa ser feito.'); return; }
+    setSalvando(true);
+    setErroForm('');
+    try {
+      await api.criarTarefa({
+        titulo: form.titulo,
+        descricao: form.descricao || undefined,
+        tipo: form.tipo,
+        prioridade: form.prioridade,
+        clienteId: clienteEscolhido?.id ?? null,
+      });
+      setCriando(false);
+      carregar();
+    } catch (e: any) {
+      setErroForm(e.message || 'Erro ao criar tarefa');
+    } finally {
+      setSalvando(false);
     }
   }
 
@@ -221,45 +248,58 @@ export default function TarefasPage() {
     marginBottom: 6, display: 'block',
   };
 
-  const naPauta = tarefas.slice(0, PAUTA_SEMANAL);
-  const fila = tarefas.slice(PAUTA_SEMANAL);
+  // Concluídas só desta semana: a coluna serve para dar a sensação de trabalho
+  // feito, não para virar arquivo histórico.
+  const inicioSemana = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    d.setHours(0, 0, 0, 0);
+    return d;
+  })();
+
+  function daColuna(id: string) {
+    return tarefas
+      .filter(t => {
+        if (t.status !== id) return false;
+        if (id === 'concluida') return new Date(t.criadoEm) >= inicioSemana || !!t.observacao || true;
+        return true;
+      })
+      .sort((a, b) => b.prioridade - a.prioridade);
+  }
 
   return (
-    <main className="min-h-screen" style={{ padding: '32px 28px', width: '100%' }}>
+    <main className="min-h-screen" style={{ padding: '28px 24px', width: '100%', display: 'flex', flexDirection: 'column' }}>
 
       {/* Cabeçalho */}
-      <header className="fade-up" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 28 }}>
+      <header className="fade-up" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 22 }}>
         <div>
           <p style={{ fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginBottom: 6 }}>
             Carteira
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <ClipboardList size={20} style={{ color: 'var(--accent)' }} />
-            <h1 style={{ fontSize: 30, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--font-barlow)', lineHeight: 1 }}>
+            <h1 style={{ fontSize: 28, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--font-barlow)', lineHeight: 1 }}>
               Tarefas
             </h1>
           </div>
           <p style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-space-mono)', marginTop: 6 }}>
-            pauta da semana · o que precisa de visita
+            arraste os cartões entre as colunas
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-          {([['abertas', 'Abertas'], ['concluida', 'Concluídas'], ['todas', 'Todas']] as const).map(([k, label]) => (
-            <button key={k} onClick={() => setFiltro(k)} style={{
-              fontSize: 10, padding: '6px 14px', borderRadius: 4,
-              background: filtro === k ? 'var(--accent)' : 'var(--bg-surface)',
-              color: filtro === k ? '#fff' : 'var(--text-secondary)',
-              border: '1px solid', borderColor: filtro === k ? 'var(--accent)' : 'var(--border)',
-              fontFamily: 'var(--font-space-mono)', fontWeight: 700, textTransform: 'uppercase',
-              letterSpacing: '0.05em', cursor: 'pointer',
-            }}>
-              {label}
-            </button>
-          ))}
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
+          {resumo && (
+            <div style={{ display: 'flex', gap: 18 }}>
+              <Indicador valor={resumo.concluidasSemana} rotulo="feitas na semana" cor="#047857" />
+              <Indicador valor={resumo.recuperadosSemana} rotulo="recuperados" cor="#2557e7" />
+              {resumo.valorEmRisco > 0 && (
+                <Indicador valor={moeda(resumo.valorEmRisco)!} rotulo="em risco" cor="#c81e1e" />
+              )}
+            </div>
+          )}
           <button onClick={abrirCriacao} style={{
             display: 'flex', alignItems: 'center', gap: 6,
-            padding: '8px 16px', borderRadius: 5, border: 'none', cursor: 'pointer',
+            padding: '9px 16px', borderRadius: 5, border: 'none', cursor: 'pointer',
             background: 'var(--accent)', color: '#fff', whiteSpace: 'nowrap',
             fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-space-mono)',
             textTransform: 'uppercase', letterSpacing: '0.05em',
@@ -268,31 +308,6 @@ export default function TarefasPage() {
           </button>
         </div>
       </header>
-
-      {/* Resumo */}
-      {resumo && (
-        <div className="fade-up-1" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14, marginBottom: 26 }}>
-          <div className="kpi-card" style={{ borderTop: '2px solid var(--accent)', padding: '18px 22px' }}>
-            <p style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--text-secondary)', fontFamily: 'var(--font-space-mono)', marginBottom: 10 }}>Na Pauta</p>
-            <p style={{ fontSize: 38, fontWeight: 900, lineHeight: 1, fontFamily: 'var(--font-barlow)', color: 'var(--text-primary)' }}>
-              {resumo.pendentes + resumo.emAndamento}
-            </p>
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, fontFamily: 'var(--font-space-mono)' }}>aguardando ação</p>
-          </div>
-          <div className="kpi-card" style={{ borderTop: '2px solid #047857', padding: '18px 22px' }}>
-            <p style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--text-secondary)', fontFamily: 'var(--font-space-mono)', marginBottom: 10 }}>Feitas na Semana</p>
-            <p style={{ fontSize: 38, fontWeight: 900, lineHeight: 1, fontFamily: 'var(--font-barlow)', color: '#047857' }}>{resumo.concluidasSemana}</p>
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, fontFamily: 'var(--font-space-mono)' }}>
-              {resumo.recuperadosSemana} cliente(s) recuperado(s)
-            </p>
-          </div>
-          <div className="kpi-card" style={{ borderTop: '2px solid #c27803', padding: '18px 22px' }}>
-            <p style={{ fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--text-secondary)', fontFamily: 'var(--font-space-mono)', marginBottom: 10 }}>Adiadas</p>
-            <p style={{ fontSize: 38, fontWeight: 900, lineHeight: 1, fontFamily: 'var(--font-barlow)', color: '#c27803' }}>{resumo.adiadas}</p>
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, fontFamily: 'var(--font-space-mono)' }}>voltam na data marcada</p>
-          </div>
-        </div>
-      )}
 
       {erroAcao && (
         <div className="fade-up" style={{
@@ -310,60 +325,79 @@ export default function TarefasPage() {
         </div>
       )}
 
-      {/* Lista */}
+      {/* Quadro */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-muted)', fontSize: 13, fontFamily: 'var(--font-space-mono)' }}>
           <span className="live-dot" style={{ marginRight: 10, display: 'inline-block' }} /> Carregando...
         </div>
-      ) : tarefas.length === 0 ? (
-        <div className="kpi-card" style={{ textAlign: 'center', padding: '56px 24px' }}>
-          <ClipboardList size={28} style={{ color: 'var(--text-muted)', opacity: 0.5, marginBottom: 14 }} strokeWidth={1.5} />
-          <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)', fontFamily: 'var(--font-barlow)', marginBottom: 6 }}>
-            {filtro === 'abertas' ? 'Nenhuma tarefa em aberto' : 'Nada por aqui'}
-          </p>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginBottom: 18, lineHeight: 1.6 }}>
-            {filtro === 'abertas'
-              ? <>Pauta limpa. Crie uma tarefa ou espere o sistema<br />apontar um cliente que precisa de atenção.</>
-              : 'Mude o filtro para ver outras tarefas.'}
-          </p>
-          {filtro === 'abertas' && (
-            <button onClick={abrirCriacao} style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '9px 18px', borderRadius: 6, border: 'none', cursor: 'pointer',
-              background: 'var(--accent)', color: '#fff',
-              fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-space-mono)',
-              textTransform: 'uppercase', letterSpacing: '0.05em',
-            }}>
-              <Plus size={13} strokeWidth={2.5} /> Nova Tarefa
-            </button>
-          )}
-        </div>
       ) : (
-        <div className="fade-up-2" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {naPauta.map(t => (
-            <CardTarefa key={t.id} t={t} onConcluir={() => abrirConclusao(t, 'concluir')}
-              onAdiar={() => abrirConclusao(t, 'adiar')} onStatus={mudarStatus}
-              onExcluir={() => setExcluindo(t)} />
-          ))}
-
-          {fila.length > 0 && (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0 6px' }}>
-                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-                <span style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)' }}>
-                  Fora da pauta · {fila.length} para as próximas semanas
-                </span>
-                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-              </div>
-              {fila.map(t => (
-                <div key={t.id} style={{ opacity: 0.6 }}>
-                  <CardTarefa t={t} onConcluir={() => abrirConclusao(t, 'concluir')}
-                    onAdiar={() => abrirConclusao(t, 'adiar')} onStatus={mudarStatus}
-                    onExcluir={() => setExcluindo(t)} />
+        <div className="fade-up-1 quadro-tarefas">
+          {COLUNAS.map(col => {
+            const itens = daColuna(col.id);
+            const acima = col.id === 'pendente' && itens.length > CAPACIDADE_SEMANAL;
+            return (
+              <section
+                key={col.id}
+                onDragOver={e => { e.preventDefault(); setColunaAlvo(col.id); }}
+                onDragLeave={() => setColunaAlvo(c => (c === col.id ? null : c))}
+                onDrop={e => {
+                  e.preventDefault();
+                  setColunaAlvo(null);
+                  if (arrastando) moverPara(arrastando, col.id);
+                  setArrastando(null);
+                }}
+                style={{
+                  display: 'flex', flexDirection: 'column', minWidth: 0,
+                  background: colunaAlvo === col.id ? 'var(--accent-dim)' : 'var(--bg-surface-2)',
+                  border: `1px solid ${colunaAlvo === col.id ? 'var(--accent)' : 'var(--border)'}`,
+                  borderRadius: 12, padding: 10, transition: 'background 0.15s, border-color 0.15s',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px 12px' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: col.cor, flexShrink: 0 }} />
+                  <h2 style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: 'var(--font-space-mono)', color: 'var(--text-primary)' }}>
+                    {col.titulo}
+                  </h2>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-space-mono)',
+                    background: acima ? '#fff1f1' : 'var(--bg-surface-3)',
+                    color: acima ? '#c81e1e' : 'var(--text-muted)',
+                    border: `1px solid ${acima ? '#fecaca' : 'var(--border)'}`,
+                    borderRadius: 10, padding: '1px 7px',
+                  }}>
+                    {itens.length}
+                  </span>
+                  <span style={{ marginLeft: 'auto', fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    {col.descricao}
+                  </span>
                 </div>
-              ))}
-            </>
-          )}
+
+                {acima && (
+                  <p style={{ fontSize: 10, color: '#c81e1e', fontFamily: 'var(--font-space-mono)', lineHeight: 1.5, padding: '0 6px 10px' }}>
+                    Acima de {CAPACIDADE_SEMANAL} para a semana.
+                  </p>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 60 }}>
+                  {itens.length === 0 ? (
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', textAlign: 'center', padding: '20px 8px', fontStyle: 'italic' }}>
+                      {col.id === 'pendente' ? 'Pauta limpa' : '—'}
+                    </p>
+                  ) : itens.map(t => (
+                    <Cartao
+                      key={t.id}
+                      t={t}
+                      arrastando={arrastando?.id === t.id}
+                      onDragStart={() => setArrastando(t)}
+                      onDragEnd={() => { setArrastando(null); setColunaAlvo(null); }}
+                      onExcluir={() => setExcluindo(t)}
+                      onMover={moverPara}
+                    />
+                  ))}
+                </div>
+              </section>
+            );
+          })}
         </div>
       )}
 
@@ -371,42 +405,6 @@ export default function TarefasPage() {
       {(criando || concluindo || excluindo) && (
         <div className="overlay-backdrop" onClick={() => { setCriando(false); setConcluindo(null); setExcluindo(null); }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(13,20,36,0.45)', zIndex: 40, backdropFilter: 'blur(2px)' }} />
-      )}
-
-      {/* Confirmar exclusão */}
-      {excluindo && (
-        <div className="modal-panel" role="dialog" aria-modal="true" aria-label="Excluir tarefa" style={{
-          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-          background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10,
-          zIndex: 50, padding: '26px', width: 'min(400px, calc(100vw - 32px))',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
-            <AlertTriangle size={17} style={{ color: '#c81e1e', flexShrink: 0 }} />
-            <h3 style={{ fontSize: 15, fontWeight: 800, fontFamily: 'var(--font-barlow)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Excluir tarefa?
-            </h3>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', fontFamily: 'var(--font-space-mono)', lineHeight: 1.6, marginBottom: 18 }}>
-            <strong>{excluindo.titulo}</strong> some de vez, sem deixar registro.
-            <br /><br />
-            Se a tarefa foi feita ou não era necessária, prefira <strong>Concluir</strong> ou{' '}
-            <strong>Descartar</strong> — assim ela sai da pauta mas o histórico permanece.
-          </p>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setExcluindo(null)} style={{
-              flex: 1, padding: 10, borderRadius: 6, cursor: 'pointer',
-              border: '1px solid var(--border)', background: 'var(--bg-surface)',
-              color: 'var(--text-secondary)', fontSize: 11, fontWeight: 700,
-              fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase',
-            }}>Cancelar</button>
-            <button onClick={confirmarExclusao} style={{
-              flex: 1, padding: 10, borderRadius: 6, cursor: 'pointer',
-              border: 'none', background: '#c81e1e', color: '#fff',
-              fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase',
-            }}>Excluir</button>
-          </div>
-        </div>
       )}
 
       {/* Nova tarefa */}
@@ -592,121 +590,137 @@ export default function TarefasPage() {
           </div>
         </div>
       )}
+
+      {/* Excluir */}
+      {excluindo && (
+        <div className="modal-panel" role="dialog" aria-modal="true" aria-label="Excluir tarefa" style={{
+          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+          background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10,
+          zIndex: 50, padding: '26px', width: 'min(400px, calc(100vw - 32px))',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
+            <AlertTriangle size={17} style={{ color: '#c81e1e', flexShrink: 0 }} />
+            <h3 style={{ fontSize: 15, fontWeight: 800, fontFamily: 'var(--font-barlow)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Excluir tarefa?
+            </h3>
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', fontFamily: 'var(--font-space-mono)', lineHeight: 1.6, marginBottom: 18 }}>
+            <strong>{excluindo.titulo}</strong> some de vez, sem deixar registro.
+            <br /><br />
+            Se a tarefa foi feita ou não era necessária, prefira concluí-la ou descartá-la —
+            assim ela sai do quadro mas o histórico permanece.
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setExcluindo(null)} style={{
+              flex: 1, padding: 10, borderRadius: 6, cursor: 'pointer',
+              border: '1px solid var(--border)', background: 'var(--bg-surface)',
+              color: 'var(--text-secondary)', fontSize: 11, fontWeight: 700,
+              fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase',
+            }}>Cancelar</button>
+            <button onClick={confirmarExclusao} style={{
+              flex: 1, padding: 10, borderRadius: 6, cursor: 'pointer',
+              border: 'none', background: '#c81e1e', color: '#fff',
+              fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase',
+            }}>Excluir</button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
 
-function CardTarefa({ t, onConcluir, onAdiar, onStatus, onExcluir }: {
-  t: Tarefa;
-  onConcluir: () => void;
-  onAdiar: () => void;
-  onStatus: (t: Tarefa, s: string) => void;
-  onExcluir: () => void;
-}) {
-  const concluida = t.status === 'concluida' || t.status === 'descartada';
-  const res = RESULTADOS.find(r => r.id === t.resultado);
-
+function Indicador({ valor, rotulo, cor }: { valor: number | string; rotulo: string; cor: string }) {
   return (
-    <div className="kpi-card" style={{ borderLeft: `3px solid ${corPrioridade(t.prioridade)}`, padding: '16px 20px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 220 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5, flexWrap: 'wrap' }}>
-            <span title={t.origem === 'sistema' ? 'Gerada pelo sistema' : 'Criada por pessoa'}
-              style={{ display: 'flex', color: 'var(--text-muted)' }}>
-              {t.origem === 'sistema' ? <Bot size={13} /> : <User size={13} />}
-            </span>
-            <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-barlow)' }}>
-              {t.titulo}
-            </p>
-            {t.status === 'em_andamento' && (
-              <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 3, background: '#ebf1fe', color: '#1e3fa8', border: '1px solid #a5bcf7', fontFamily: 'var(--font-space-mono)', fontWeight: 700, textTransform: 'uppercase' }}>
-                em andamento
-              </span>
-            )}
-            {t.status === 'adiada' && (
-              <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 3, background: '#fef8ec', color: '#92400e', border: '1px solid #fcd97d', fontFamily: 'var(--font-space-mono)', fontWeight: 700, textTransform: 'uppercase' }}>
-                adiada
-              </span>
-            )}
-          </div>
-
-          {t.clienteNome && (
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 11.5, color: 'var(--text-secondary)', fontFamily: 'var(--font-space-mono)', marginBottom: 4 }}>
-              <span style={{ fontWeight: 700 }}>{t.clienteNome}</span>
-              {t.clienteTelefone && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Phone size={10} />{t.clienteTelefone.replace(/^55/, '')}</span>}
-              {(t.clienteEndereco || t.clienteBairro) && (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)' }}>
-                  <MapPin size={10} />{[t.clienteEndereco, t.clienteBairro].filter(Boolean).join(', ')}
-                </span>
-              )}
-            </div>
-          )}
-
-          {t.descricao && (
-            <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.55, marginTop: 4 }}>{t.descricao}</p>
-          )}
-
-          {t.valorRisco !== null && (
-            <p style={{ fontSize: 11, color: '#c81e1e', fontFamily: 'var(--font-space-mono)', marginTop: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
-              <AlertTriangle size={11} /> {moeda(t.valorRisco)}/mês em risco
-            </p>
-          )}
-
-          {concluida && res && (
-            <p style={{ fontSize: 11.5, color: res.cor, fontFamily: 'var(--font-space-mono)', marginTop: 8, fontWeight: 700 }}>
-              {res.label}
-            </p>
-          )}
-          {concluida && t.observacao && (
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, fontStyle: 'italic' }}>{t.observacao}</p>
-          )}
-        </div>
-
-        {!concluida && (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {t.status === 'pendente' && (
-              <button onClick={() => onStatus(t, 'em_andamento')} title="Marcar que começou"
-                style={botaoAcao('var(--border)', 'var(--text-secondary)')}>
-                <Clock size={12} /> Iniciar
-              </button>
-            )}
-            <button onClick={onConcluir} title="Concluir e registrar o que aconteceu"
-              style={botaoAcao('#6ee7b7', '#065f46', '#ecfdf5')}>
-              <Check size={12} strokeWidth={2.5} /> Concluir
-            </button>
-            <button onClick={onAdiar} title="Adiar para outra data"
-              style={botaoAcao('#fcd97d', '#92400e', '#fef8ec')}>
-              <CalendarClock size={12} /> Adiar
-            </button>
-            <button onClick={() => onStatus(t, 'descartada')} title="Descartar — não é necessário, mas fica no histórico"
-              aria-label="Descartar tarefa" style={botaoAcao('var(--border)', 'var(--text-muted)')}>
-              <Ban size={12} />
-            </button>
-            <button onClick={onExcluir} title="Excluir de vez"
-              aria-label="Excluir tarefa" style={botaoAcao('#fecaca', '#c81e1e', '#fff1f1')}>
-              <Trash2 size={12} />
-            </button>
-          </div>
-        )}
-
-        {/* Tarefa já fechada continua podendo ser removida de vez */}
-        {concluida && (
-          <button onClick={onExcluir} title="Excluir de vez" aria-label="Excluir tarefa"
-            style={botaoAcao('#fecaca', '#c81e1e', '#fff1f1')}>
-            <Trash2 size={12} />
-          </button>
-        )}
-      </div>
+    <div style={{ textAlign: 'right' }}>
+      <p style={{ fontSize: 20, fontWeight: 900, lineHeight: 1, fontFamily: 'var(--font-barlow)', color: cor }}>{valor}</p>
+      <p style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 3 }}>{rotulo}</p>
     </div>
   );
 }
 
-function botaoAcao(borda: string, cor: string, fundo = 'var(--bg-surface)'): React.CSSProperties {
-  return {
-    display: 'flex', alignItems: 'center', gap: 5,
-    padding: '6px 11px', borderRadius: 5, cursor: 'pointer',
-    border: `1px solid ${borda}`, background: fundo, color: cor,
-    fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-space-mono)',
-    textTransform: 'uppercase', letterSpacing: '0.05em',
-  };
+function Cartao({ t, arrastando, onDragStart, onDragEnd, onExcluir, onMover }: {
+  t: Tarefa;
+  arrastando: boolean;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onExcluir: () => void;
+  onMover: (t: Tarefa, status: string) => void;
+}) {
+  const res = RESULTADOS.find(r => r.id === t.resultado);
+  const encerrada = t.status === 'concluida' || t.status === 'descartada';
+
+  return (
+    <article
+      draggable={!encerrada}
+      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; onDragStart(); }}
+      onDragEnd={onDragEnd}
+      style={{
+        background: 'var(--bg-surface)',
+        border: '1px solid var(--border)',
+        borderLeft: `3px solid ${corPrioridade(t.prioridade)}`,
+        borderRadius: 8, padding: '11px 12px',
+        cursor: encerrada ? 'default' : 'grab',
+        opacity: arrastando ? 0.4 : 1,
+        boxShadow: '0 1px 2px rgba(13,20,36,0.05)',
+        transition: 'opacity 0.15s, box-shadow 0.15s',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 6 }}>
+        {!encerrada && <GripVertical size={12} style={{ color: 'var(--text-muted)', flexShrink: 0, marginTop: 2 }} />}
+        <span title={t.origem === 'sistema' ? 'Gerada pelo sistema' : `Criada por ${t.criadoPorNome || 'pessoa'}`}
+          style={{ color: 'var(--text-muted)', flexShrink: 0, marginTop: 2, display: 'flex' }}>
+          {t.origem === 'sistema' ? <Bot size={12} /> : <User size={12} />}
+        </span>
+        <p style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-barlow)', lineHeight: 1.35, flex: 1 }}>
+          {t.titulo}
+        </p>
+      </div>
+
+      {t.clienteNome && (
+        <p style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'var(--font-space-mono)', fontWeight: 700, marginBottom: 3 }}>
+          {t.clienteNome}
+        </p>
+      )}
+
+      {(t.clienteBairro || t.clienteTelefone) && (
+        <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap', fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-space-mono)', marginBottom: 5 }}>
+          {t.clienteTelefone && <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Phone size={9} />{t.clienteTelefone.replace(/^55/, '')}</span>}
+          {t.clienteBairro && <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><MapPin size={9} />{t.clienteBairro}</span>}
+        </div>
+      )}
+
+      {t.valorRisco !== null && (
+        <p style={{ fontSize: 10, color: '#c81e1e', fontFamily: 'var(--font-space-mono)', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+          <AlertTriangle size={9} /> {moeda(t.valorRisco)}/mês
+        </p>
+      )}
+
+      {t.status === 'adiada' && t.adiadaPara && (
+        <p style={{ fontSize: 10, color: '#c27803', fontFamily: 'var(--font-space-mono)', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <CalendarClock size={9} /> volta em {dataCurta(t.adiadaPara)}
+        </p>
+      )}
+
+      {encerrada && res && (
+        <p style={{ fontSize: 10, color: res.cor, fontFamily: 'var(--font-space-mono)', fontWeight: 700, marginTop: 4 }}>
+          {res.label}
+        </p>
+      )}
+
+      <div style={{ display: 'flex', gap: 4, marginTop: 8, justifyContent: 'flex-end' }}>
+        {!encerrada && (
+          <button onClick={() => onMover(t, 'descartada')} title="Descartar — sai do quadro, fica no histórico"
+            aria-label="Descartar tarefa"
+            style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', padding: '3px 6px', color: 'var(--text-muted)', display: 'flex' }}>
+            <Ban size={11} />
+          </button>
+        )}
+        <button onClick={onExcluir} title="Excluir de vez" aria-label="Excluir tarefa"
+          style={{ background: 'none', border: '1px solid #fecaca', borderRadius: 4, cursor: 'pointer', padding: '3px 6px', color: '#c81e1e', display: 'flex' }}>
+          <Trash2 size={11} />
+        </button>
+      </div>
+    </article>
+  );
 }

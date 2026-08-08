@@ -177,9 +177,22 @@ export async function tarefasRoutes(server: FastifyInstance) {
       );
       if (!rows.length) return reply.code(404).send({ error: 'Tarefa não encontrada' });
       return { ok: true };
-    } catch (err) {
-      server.log.error(err);
-      return reply.code(500).send({ error: 'Erro ao atualizar tarefa' });
+    } catch (err: any) {
+      server.log.error({ err, sets, params }, 'Falha ao atualizar tarefa');
+
+      // 42703 = coluna inexistente. É o sintoma de a trigger de atualizado_em
+      // ainda estar apontando para `updated_at`, o que derruba todo UPDATE.
+      if (err.code === '42703') {
+        return reply.code(500).send({
+          error: 'O banco recusou a alteração (coluna inexistente). '
+               + 'Verifique se a migração 005 foi aplicada.',
+          codigo: err.code,
+        });
+      }
+      return reply.code(500).send({
+        error: `Erro ao atualizar tarefa: ${err.message || 'desconhecido'}`,
+        codigo: err.code,
+      });
     }
   });
 
