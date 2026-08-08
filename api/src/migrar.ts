@@ -18,14 +18,34 @@ import { pool } from './db';
  * nunca metade de uma migração.
  */
 
-/** Onde estão os .sql, rodando por tsx (src) ou compilado (dist). */
-function pastaMigracoes(): string | null {
-  const candidatos = [
+/** Onde procurar os .sql, rodando por tsx (src) ou compilado (dist). */
+function caminhosCandidatos(): string[] {
+  return [
     join(__dirname, '..', 'db', 'migrations'),        // dist/../db
-    join(__dirname, '..', '..', 'db', 'migrations'),  // src/../../db
+    join(__dirname, '..', '..', 'db', 'migrations'),  // dist/src/../../db
     join(process.cwd(), 'db', 'migrations'),
   ];
-  return candidatos.find(existsSync) ?? null;
+}
+
+function pastaMigracoes(): string | null {
+  return caminhosCandidatos().find(existsSync) ?? null;
+}
+
+/**
+ * Garante a tabela de controle.
+ *
+ * Chamada por quem precisa dela: `marcarComoAplicadas` roda antes de
+ * `aplicarMigracoes` na subida, e criar a tabela apenas dentro da segunda
+ * fazia a primeira falhar com "relation does not exist" — derrubando a
+ * execução inteira sem aplicar nada.
+ */
+async function garantirTabelaControle(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS public.telegas_migracoes (
+      nome        TEXT PRIMARY KEY,
+      aplicada_em TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
 }
 
 export async function aplicarMigracoes(log: {
@@ -35,16 +55,14 @@ export async function aplicarMigracoes(log: {
 }): Promise<void> {
   const pasta = pastaMigracoes();
   if (!pasta) {
-    log.warn('Pasta de migrações não encontrada — nenhuma migração aplicada.');
+    log.warn(
+      'Pasta de migrações não encontrada — nenhuma migração aplicada. '
+      + `Procurei em: ${caminhosCandidatos().join(', ')}`
+    );
     return;
   }
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS public.telegas_migracoes (
-      nome        TEXT PRIMARY KEY,
-      aplicada_em TIMESTAMP NOT NULL DEFAULT NOW()
-    )
-  `);
+  await garantirTabelaControle();
 
   const { rows } = await pool.query(`SELECT nome FROM public.telegas_migracoes`);
   const jaAplicadas = new Set(rows.map((r: any) => r.nome));
@@ -98,9 +116,41 @@ export async function aplicarMigracoes(log: {
  */
 export async function marcarComoAplicadas(nomes: string[]): Promise<void> {
   if (nomes.length === 0) return;
+  await garantirTabelaControle();
   await pool.query(
     `INSERT INTO public.telegas_migracoes (nome)
      SELECT unnest($1::text[]) ON CONFLICT (nome) DO NOTHING`,
     [nomes]
   );
+}
+
+/** Estado das migrações, para diagnóstico pela API. */
+export async function estadoMigracoes(): Promise<{
+  pasta: string | null;
+  arquivos: string[];
+  aplicadas: string[];
+  pendentes: string[];
+}> {
+  const pasta = pastaMigracoes();
+  const arquivos = pasta
+    ? readdirSync(pasta).filter((f) => f.endsWith('.sql')).sort()
+    : [];
+
+  let aplicadas: string[] = [];
+  try {
+    await garantirTabelaControle();
+    const { rows } = await pool.query(
+      `SELECT nome FROM public.telegas_migracoes ORDER BY nome`
+    );
+    aplicadas = rows.map((r: any) => r.nome);
+  } catch {
+    // Banco fora: devolve o que der, em vez de falhar o diagnóstico.
+  }
+
+  return {
+    pasta,
+    arquivos,
+    aplicadas,
+    pendentes: arquivos.filter((f) => !aplicadas.includes(f)),
+  };
 }

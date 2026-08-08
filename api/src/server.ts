@@ -54,6 +54,7 @@ server.addHook('onRequest', async (request, reply) => {
   if (
     url === '/api/health' ||
     url === '/api/version' ||
+    url === '/api/migracoes' ||
     url.startsWith('/api/auth/') ||
     url === '/api/entregador/login' ||
     url === '/api/entregador/vapid-key' ||
@@ -96,7 +97,9 @@ async function applyMigrations() {
       error: (m) => server.log.error(m),
     });
   } catch (err) {
-    server.log.error({ err }, 'Falha ao aplicar migrações');
+    // Antes, uma falha aqui era silenciosa e o sintoma só aparecia na tela,
+    // como coluna inexistente. Agora o motivo fica explícito no log.
+    server.log.error({ err }, 'Falha ao aplicar migrações — veja /api/migracoes');
   }
 }
 

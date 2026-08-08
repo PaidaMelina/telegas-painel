@@ -22,6 +22,13 @@ export async function setupRoutes(server: FastifyInstance) {
     return { version: '1.0.1', deployed_at: '2026-03-20' };
   });
 
+  // Estado das migrações. Quando uma falha, o sintoma aparece longe daqui —
+  // uma tela reclamando de coluna inexistente — e a causa fica só no log.
+  server.get('/api/migracoes', async () => {
+    const { estadoMigracoes } = await import('../migrar');
+    return estadoMigracoes();
+  });
+
   server.get('/api/db-check', async () => {
     try {
       const result = await pool.query('SELECT NOW() as time, current_database() as db');
