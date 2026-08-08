@@ -94,23 +94,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_telegas_tarefas_sem_duplicata
   ON public.telegas_tarefas (cliente_id, regra)
   WHERE origem = 'sistema' AND status IN ('pendente', 'em_andamento');
 
--- Mantém atualizado_em sem depender da aplicação, como já acontece em
--- telegas_pedidos e telegas_clientes. Condicional: se a função não existir
--- neste banco, seguimos sem a trigger em vez de abortar a migração inteira.
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM pg_proc p
-      JOIN pg_namespace n ON n.oid = p.pronamespace
-     WHERE n.nspname = 'public' AND p.proname = 'update_updated_at_column'
-  ) THEN
-    DROP TRIGGER IF EXISTS update_telegas_tarefas_updated_at ON public.telegas_tarefas;
-    CREATE TRIGGER update_telegas_tarefas_updated_at
-      BEFORE UPDATE ON public.telegas_tarefas
-      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-  ELSE
-    RAISE NOTICE 'update_updated_at_column() não existe: telegas_tarefas.atualizado_em não será preenchido automaticamente.';
-  END IF;
-END $$;
+-- A trigger de atualizado_em é criada pela migração 005.
+--
+-- Esta migração tentava reaproveitar update_updated_at_column(), mas aquela
+-- função escreve na coluna `updated_at`, que não existe nesta tabela — o que
+-- fazia toda alteração de tarefa falhar. Ver 005_corrige_trigger_tarefas.sql.
 
 COMMIT;

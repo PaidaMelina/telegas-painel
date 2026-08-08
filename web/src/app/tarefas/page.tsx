@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import {
   ClipboardList, Plus, X, MapPin, Phone, Check, Clock, CalendarClock,
-  Ban, AlertTriangle, Bot, User, Search,
+  Ban, AlertTriangle, Bot, User, Search, Trash2,
 } from 'lucide-react';
 
 interface Tarefa {
@@ -79,6 +79,11 @@ export default function TarefasPage() {
   const [erroForm, setErroForm] = useState('');
 
   // Conclusão
+  // Erro de ação (iniciar, descartar, excluir). Antes ia só para o console, e
+  // uma falha no banco aparecia para o usuário como "o botão não faz nada".
+  const [erroAcao, setErroAcao] = useState('');
+  const [excluindo, setExcluindo] = useState<Tarefa | null>(null);
+
   const [concluindo, setConcluindo] = useState<Tarefa | null>(null);
   const [resultado, setResultado] = useState('');
   const [observacao, setObservacao] = useState('');
@@ -106,7 +111,7 @@ export default function TarefasPage() {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') { setCriando(false); setConcluindo(null); }
+      if (e.key === 'Escape') { setCriando(false); setConcluindo(null); setExcluindo(null); }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -182,11 +187,25 @@ export default function TarefasPage() {
   }
 
   async function mudarStatus(t: Tarefa, status: string) {
+    setErroAcao('');
     try {
       await api.atualizarTarefa(t.id, { status });
       carregar(filtro);
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setErroAcao(e.message || 'Não foi possível atualizar a tarefa.');
+    }
+  }
+
+  async function confirmarExclusao() {
+    if (!excluindo) return;
+    setErroAcao('');
+    try {
+      await api.excluirTarefa(excluindo.id);
+      setExcluindo(null);
+      carregar(filtro);
+    } catch (e: any) {
+      setErroAcao(e.message || 'Não foi possível excluir a tarefa.');
+      setExcluindo(null);
     }
   }
 
@@ -275,6 +294,22 @@ export default function TarefasPage() {
         </div>
       )}
 
+      {erroAcao && (
+        <div className="fade-up" style={{
+          display: 'flex', alignItems: 'center', gap: 9, marginBottom: 16,
+          padding: '12px 16px', borderRadius: 8,
+          background: '#fff1f1', border: '1px solid #fecaca', color: '#c81e1e',
+          fontSize: 12.5, fontFamily: 'var(--font-space-mono)', lineHeight: 1.5,
+        }}>
+          <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+          <span style={{ flex: 1 }}>{erroAcao}</span>
+          <button onClick={() => setErroAcao('')} aria-label="Fechar aviso"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c81e1e', display: 'flex' }}>
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {/* Lista */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-muted)', fontSize: 13, fontFamily: 'var(--font-space-mono)' }}>
@@ -307,7 +342,8 @@ export default function TarefasPage() {
         <div className="fade-up-2" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {naPauta.map(t => (
             <CardTarefa key={t.id} t={t} onConcluir={() => abrirConclusao(t, 'concluir')}
-              onAdiar={() => abrirConclusao(t, 'adiar')} onStatus={mudarStatus} />
+              onAdiar={() => abrirConclusao(t, 'adiar')} onStatus={mudarStatus}
+              onExcluir={() => setExcluindo(t)} />
           ))}
 
           {fila.length > 0 && (
@@ -322,7 +358,8 @@ export default function TarefasPage() {
               {fila.map(t => (
                 <div key={t.id} style={{ opacity: 0.6 }}>
                   <CardTarefa t={t} onConcluir={() => abrirConclusao(t, 'concluir')}
-                    onAdiar={() => abrirConclusao(t, 'adiar')} onStatus={mudarStatus} />
+                    onAdiar={() => abrirConclusao(t, 'adiar')} onStatus={mudarStatus}
+                    onExcluir={() => setExcluindo(t)} />
                 </div>
               ))}
             </>
@@ -331,9 +368,45 @@ export default function TarefasPage() {
       )}
 
       {/* Fundo escurecido */}
-      {(criando || concluindo) && (
-        <div className="overlay-backdrop" onClick={() => { setCriando(false); setConcluindo(null); }}
+      {(criando || concluindo || excluindo) && (
+        <div className="overlay-backdrop" onClick={() => { setCriando(false); setConcluindo(null); setExcluindo(null); }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(13,20,36,0.45)', zIndex: 40, backdropFilter: 'blur(2px)' }} />
+      )}
+
+      {/* Confirmar exclusão */}
+      {excluindo && (
+        <div className="modal-panel" role="dialog" aria-modal="true" aria-label="Excluir tarefa" style={{
+          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+          background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10,
+          zIndex: 50, padding: '26px', width: 'min(400px, calc(100vw - 32px))',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
+            <AlertTriangle size={17} style={{ color: '#c81e1e', flexShrink: 0 }} />
+            <h3 style={{ fontSize: 15, fontWeight: 800, fontFamily: 'var(--font-barlow)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Excluir tarefa?
+            </h3>
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', fontFamily: 'var(--font-space-mono)', lineHeight: 1.6, marginBottom: 18 }}>
+            <strong>{excluindo.titulo}</strong> some de vez, sem deixar registro.
+            <br /><br />
+            Se a tarefa foi feita ou não era necessária, prefira <strong>Concluir</strong> ou{' '}
+            <strong>Descartar</strong> — assim ela sai da pauta mas o histórico permanece.
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setExcluindo(null)} style={{
+              flex: 1, padding: 10, borderRadius: 6, cursor: 'pointer',
+              border: '1px solid var(--border)', background: 'var(--bg-surface)',
+              color: 'var(--text-secondary)', fontSize: 11, fontWeight: 700,
+              fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase',
+            }}>Cancelar</button>
+            <button onClick={confirmarExclusao} style={{
+              flex: 1, padding: 10, borderRadius: 6, cursor: 'pointer',
+              border: 'none', background: '#c81e1e', color: '#fff',
+              fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-space-mono)', textTransform: 'uppercase',
+            }}>Excluir</button>
+          </div>
+        </div>
       )}
 
       {/* Nova tarefa */}
@@ -523,11 +596,12 @@ export default function TarefasPage() {
   );
 }
 
-function CardTarefa({ t, onConcluir, onAdiar, onStatus }: {
+function CardTarefa({ t, onConcluir, onAdiar, onStatus, onExcluir }: {
   t: Tarefa;
   onConcluir: () => void;
   onAdiar: () => void;
   onStatus: (t: Tarefa, s: string) => void;
+  onExcluir: () => void;
 }) {
   const concluida = t.status === 'concluida' || t.status === 'descartada';
   const res = RESULTADOS.find(r => r.id === t.resultado);
@@ -604,11 +678,23 @@ function CardTarefa({ t, onConcluir, onAdiar, onStatus }: {
               style={botaoAcao('#fcd97d', '#92400e', '#fef8ec')}>
               <CalendarClock size={12} /> Adiar
             </button>
-            <button onClick={() => onStatus(t, 'descartada')} title="Não é necessário"
-              style={botaoAcao('var(--border)', 'var(--text-muted)')}>
+            <button onClick={() => onStatus(t, 'descartada')} title="Descartar — não é necessário, mas fica no histórico"
+              aria-label="Descartar tarefa" style={botaoAcao('var(--border)', 'var(--text-muted)')}>
               <Ban size={12} />
             </button>
+            <button onClick={onExcluir} title="Excluir de vez"
+              aria-label="Excluir tarefa" style={botaoAcao('#fecaca', '#c81e1e', '#fff1f1')}>
+              <Trash2 size={12} />
+            </button>
           </div>
+        )}
+
+        {/* Tarefa já fechada continua podendo ser removida de vez */}
+        {concluida && (
+          <button onClick={onExcluir} title="Excluir de vez" aria-label="Excluir tarefa"
+            style={botaoAcao('#fecaca', '#c81e1e', '#fff1f1')}>
+            <Trash2 size={12} />
+          </button>
         )}
       </div>
     </div>
