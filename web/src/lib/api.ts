@@ -519,6 +519,15 @@ export const api = {
     return res.json();
   },
 
+  getPrecosCliente: async (clienteId?: number | null, telefone?: string) => {
+    const q = new URLSearchParams();
+    if (clienteId) q.set('clienteId', String(clienteId));
+    else if (telefone) q.set('telefone', telefone);
+    const res = await fetchAuth(`${API_URL}/portaria/precos?${q}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Erro ao buscar preços do cliente');
+    return res.json();
+  },
+
   getEntregadoresDisponiveis: async () => {
     const res = await fetchAuth(`${API_URL}/portaria/entregadores-disponiveis`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Erro ao buscar entregadores');

@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { pool } from '../db';
 import { sendPush } from '../push';
+import { resolverPrecos, etiquetasDoCliente } from '../precos';
 
 function formatTel(tel: string): string {
   const t = String(tel).replace(/\D/g, '').replace(/^55/, '');
@@ -29,6 +30,28 @@ export async function portariaRoutes(server: FastifyInstance) {
     } catch (err) {
       server.log.error(err);
       return reply.code(500).send({ error: 'Erro ao buscar entregadores' });
+    }
+  });
+
+  // GET /api/portaria/precos?clienteId=  — preços válidos para este cliente
+  //
+  // A tela precisa exibir o mesmo preço que vai ser cobrado. Sem isto, o
+  // operador monta o pedido vendo o valor de tabela e o total muda ao salvar.
+  server.get('/precos', async (request, reply) => {
+    const { clienteId, telefone } = request.query as { clienteId?: string; telefone?: string };
+    try {
+      const { rows: prods } = await pool.query(
+        `SELECT id FROM public.telegas_produtos WHERE ativo = true`
+      );
+      const etiquetas = await etiquetasDoCliente(
+        clienteId ? parseInt(clienteId, 10) : null,
+        telefone
+      );
+      const precos = await resolverPrecos(prods.map((p: any) => p.id), etiquetas);
+      return Array.from(precos.values());
+    } catch (err) {
+      server.log.error(err);
+      return reply.code(500).send({ error: 'Erro ao resolver preços' });
     }
   });
 
@@ -66,11 +89,54 @@ export async function portariaRoutes(server: FastifyInstance) {
         cId = rows[0].id;
       }
 
-      // Calculate total
-      let total = 0;
-      for (const p of produtos) {
-        total += (p.qtd || 1) * (p.preco || 0);
-      }
+      // Preço resolvido no servidor a partir das etiquetas do cliente. O valor
+      // que a tela envia serve para exibir; cobrar pelo que vem do navegador
+      // permitiria alterar o preço na requisição.
+      const etiquetas = await etiquetasDoCliente(cId, tel);
+      const precos = await resolverPrecos(
+        produtos.map((p: any) => p.id).filter(Boolean),
+        etiquetas
+      );
+
+      // A moeda do pedido é descoberta antes de somar: os itens precisam saber
+      // a cotação para converter, e um item processado antes dela ficaria fora
+      // do total estrangeiro.
+      const comMoeda = produtos
+        .map((p: any) => (p.id ? precos.get(p.id) : undefined))
+        .find((r: any) => r?.moeda);
+      const moedaPedido: string | null = comMoeda?.moeda ?? null;
+      const cotacaoPedido: number | null = comMoeda?.cotacao ?? null;
+
+      let total = 0;       // sempre em reais: é o que soma nos relatórios
+      let totalMoeda = 0;  // o que o cliente paga, quando a cobrança é em outra moeda
+
+      const itens = produtos.map((p: any) => {
+        const qtd = p.qtd || 1;
+        const resolvido = p.id ? precos.get(p.id) : undefined;
+        // Produto avulso (sem id) mantém o preço informado.
+        const precoBrl = resolvido ? resolvido.precoBrl : (p.preco || 0);
+
+        total += qtd * precoBrl;
+
+        if (moedaPedido) {
+          // Item com preço próprio na moeda soma o valor exato — converter o
+          // total de reais de volta produziria $770,04 no lugar de $770,00.
+          // Os demais entram pela cotação.
+          totalMoeda += resolvido?.precoMoeda
+            ? qtd * resolvido.precoMoeda
+            : qtd * precoBrl * (cotacaoPedido || 0);
+        }
+
+        return {
+          produto: p.nome,
+          qtd,
+          preco: precoBrl,
+          ...(resolvido?.moeda ? { precoMoeda: resolvido.precoMoeda, moeda: resolvido.moeda } : {}),
+        };
+      });
+
+      total = Math.round(total * 100) / 100;
+      totalMoeda = Math.round(totalMoeda * 100) / 100;
 
       // Find delivery person — manual selection or auto (least busy)
       let entregador: any;
@@ -96,10 +162,9 @@ export async function portariaRoutes(server: FastifyInstance) {
         entregador = entregadores[0];
       }
 
-      // Create order
-      const produtosJson = JSON.stringify(
-        produtos.map((p: any) => ({ produto: p.nome, qtd: p.qtd, preco: p.preco }))
-      );
+      // Create order — os itens já carregam o preço aplicado, inclusive o
+      // valor em moeda estrangeira quando houver.
+      const produtosJson = JSON.stringify(itens);
 
       const latVal = lat ? parseFloat(lat) : null;
       const lngVal = lng ? parseFloat(lng) : null;
@@ -108,12 +173,14 @@ export async function portariaRoutes(server: FastifyInstance) {
         `INSERT INTO public.telegas_pedidos
           (cliente_id, telefone_cliente, telefone, produtos, total, endereco, bairro,
            troco_para, forma_pagamento, status, entregador_id, confirmado_em, atribuido_em,
-           latitude, longitude)
-         VALUES ($1, $2, $2, $3::jsonb, $4, $5, $6, $7, $8, 'atribuido', $9, NOW(), NOW(), $10, $11)
+           latitude, longitude, moeda_pagamento, cotacao_usada, total_moeda)
+         VALUES ($1, $2, $2, $3::jsonb, $4, $5, $6, $7, $8, 'atribuido', $9, NOW(), NOW(),
+                 $10, $11, $12, $13, $14)
          RETURNING id`,
         [cId, tel, produtosJson, total, endereco || '', bairro || null,
          trocoPara ? parseFloat(trocoPara) : null, formaPagamento || null, entregador.id,
-         latVal, lngVal]
+         latVal, lngVal,
+         moedaPedido, cotacaoPedido, moedaPedido ? totalMoeda : null]
       );
 
       const pedidoId = pedidoRows[0].id;
@@ -168,7 +235,19 @@ export async function portariaRoutes(server: FastifyInstance) {
           if (fp.length) pagLabel = fp[0].nome;
         }
         const trocoMsg = trocoPara ? ` | Troco para: R$${parseFloat(trocoPara).toFixed(2)}` : '';
-        const texto = `*Novo pedido #${pedidoId}* (Portaria)\n\nCliente: ${nome || tel}\nProdutos:\n${listaProdutos}\nTotal: R$${total.toFixed(2)}\nEndereço: ${endereco || 'Não informado'}${bairro ? ' - ' + bairro : ''}\nPagamento: ${pagLabel}${trocoMsg}\n\nResponda ACEITAR ou RECUSAR`;
+
+        // Cobrança em outra moeda: o entregador precisa ver o valor que vai
+        // receber na mão, não só o equivalente em reais.
+        let totalMsg = `R$${total.toFixed(2)}`;
+        if (moedaPedido) {
+          const { rows: m } = await pool.query(
+            `SELECT simbolo FROM public.telegas_moedas WHERE codigo = $1`, [moedaPedido]
+          );
+          const simbolo = m[0]?.simbolo || '';
+          totalMsg = `${simbolo}${totalMoeda.toFixed(2)} (R$${total.toFixed(2)})`;
+        }
+
+        const texto = `*Novo pedido #${pedidoId}* (Portaria)\n\nCliente: ${nome || tel}\nProdutos:\n${listaProdutos}\nTotal: ${totalMsg}\nEndereço: ${endereco || 'Não informado'}${bairro ? ' - ' + bairro : ''}\nPagamento: ${pagLabel}${trocoMsg}\n\nResponda ACEITAR ou RECUSAR`;
 
         const entTel = String(entregador.telefone || '').replace(/\D/g, '');
         const numero = entTel.startsWith('55') ? entTel : `55${entTel}`;

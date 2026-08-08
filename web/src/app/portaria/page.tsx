@@ -24,6 +24,17 @@ interface Produto {
   estoqueBaixo: boolean;
 }
 
+interface PrecoCliente {
+  produtoId: number;
+  precoBrl: number;
+  precoMoeda: number | null;
+  moeda: string | null;
+  simbolo: string | null;
+  cotacao: number | null;
+  especial: boolean;
+  etiqueta: string | null;
+}
+
 interface ItemCarrinho {
   produto: Produto;
   qtd: number;
@@ -66,6 +77,10 @@ export default function PortariaPage() {
   // Produtos e carrinho
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [carrinho, setCarrinho] = useState<Record<number, ItemCarrinho>>({});
+  // Preços válidos para o cliente escolhido — clientes do Uruguai têm preço
+  // próprio em alguns produtos. Vem do servidor, que é quem decide o valor.
+  const [precosCliente, setPrecosCliente] = useState<Map<number, PrecoCliente>>(new Map());
+
   const [formasPagamento, setFormasPagamento] = useState<FormaPagamento[]>([]);
   const [pagamento, setPagamento] = useState<FormaPagamento | null>(null);
   const [troco, setTroco] = useState('');
@@ -133,6 +148,12 @@ export default function PortariaPage() {
     setResultados([]);
     setShowNovoForm(false);
     setStep('pedido');
+
+    // Carrega os preços deste cliente: as etiquetas dele podem dar preço
+    // diferente em alguns produtos.
+    api.getPrecosCliente(c.id, c.telefone)
+      .then((res: PrecoCliente[]) => setPrecosCliente(new Map(res.map(p => [p.produtoId, p]))))
+      .catch(err => console.error('Falha ao carregar preços do cliente:', err));
   }
 
   async function criarNovoCliente() {
@@ -170,7 +191,27 @@ export default function PortariaPage() {
   }
 
   const itens = Object.values(carrinho);
-  const total = itens.reduce((s, i) => s + i.produto.preco * i.qtd, 0);
+  function precoDe(prod: Produto): PrecoCliente {
+    return precosCliente.get(prod.id) ?? {
+      produtoId: prod.id, precoBrl: prod.preco, precoMoeda: null,
+      moeda: null, simbolo: null, cotacao: null, especial: false, etiqueta: null,
+    };
+  }
+
+  const total = itens.reduce((s, i) => s + precoDe(i.produto).precoBrl * i.qtd, 0);
+
+  // Total na moeda estrangeira, quando algum item é cobrado assim.
+  // Soma o preço em moeda de cada item em vez de converter o total de reais:
+  // converter de volta daria $770,04 onde o preço combinado é $770,00.
+  const moedaAtiva = itens.map(i => precoDe(i.produto)).find(p => p.moeda) ?? null;
+  const totalMoeda = moedaAtiva
+    ? itens.reduce((s, i) => {
+        const pr = precoDe(i.produto);
+        return s + (pr.precoMoeda
+          ? i.qtd * pr.precoMoeda
+          : i.qtd * pr.precoBrl * (moedaAtiva.cotacao || 0));
+      }, 0)
+    : null;
   const qtdTotal = itens.reduce((s, i) => s + i.qtd, 0);
 
   async function confirmarPedido() {
@@ -183,7 +224,7 @@ export default function PortariaPage() {
         nome: clienteSelecionado.nome,
         endereco: clienteSelecionado.endereco,
         bairro: clienteSelecionado.bairro,
-        produtos: itens.map(i => ({ id: i.produto.id, nome: i.produto.nome, qtd: i.qtd, preco: i.produto.preco })),
+        produtos: itens.map(i => ({ id: i.produto.id, nome: i.produto.nome, qtd: i.qtd, preco: precoDe(i.produto).precoBrl })),
         formaPagamento: pagamento?.slug ?? '',
         trocoPara: pagamento?.aceitaTroco && troco ? parseFloat(troco) : null,
         entregadorId: entregadorSelecionado,
@@ -465,9 +506,30 @@ export default function PortariaPage() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                         <div style={{ flex: 1 }}>
                           <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 2px' }}>{p.nome}</p>
-                          <p style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700, margin: 0, fontFamily: 'var(--font-space-mono)' }}>
-                            R$ {p.preco.toFixed(2)}
-                          </p>
+                          {(() => {
+                            const pr = precoDe(p);
+                            return (
+                              <>
+                                <p style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700, margin: 0, fontFamily: 'var(--font-space-mono)' }}>
+                                  {pr.moeda
+                                    ? `${pr.simbolo}${pr.precoMoeda?.toFixed(2)}`
+                                    : `R$ ${pr.precoBrl.toFixed(2)}`}
+                                  {pr.moeda && (
+                                    <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
+                                      {' '}· R$ {pr.precoBrl.toFixed(2)}
+                                    </span>
+                                  )}
+                                </p>
+                                {/* Deixa claro que o preço não é o de tabela —
+                                    do contrário parece erro de cadastro. */}
+                                {pr.especial && (
+                                  <p style={{ fontSize: 9, color: '#9a3412', background: '#ffedd5', border: '1px solid #fdba74', borderRadius: 3, padding: '1px 5px', display: 'inline-block', marginTop: 3, fontFamily: 'var(--font-space-mono)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                    preço {pr.etiqueta}
+                                  </p>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                         {p.estoqueBaixo && (
                           <span style={{ fontSize: 9, background: '#fef8ec', color: '#92400e', border: '1px solid #fcd97d', borderRadius: 4, padding: '2px 5px', fontFamily: 'var(--font-space-mono)', fontWeight: 700, letterSpacing: '0.06em', flexShrink: 0 }}>
@@ -527,7 +589,7 @@ export default function PortariaPage() {
                     <div key={i.produto.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
                       <span style={{ color: 'var(--text-secondary)' }}>{i.qtd}× {i.produto.nome}</span>
                       <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-space-mono)' }}>
-                        R$ {(i.qtd * i.produto.preco).toFixed(2)}
+                        R$ {(i.qtd * precoDe(i.produto).precoBrl).toFixed(2)}
                       </span>
                     </div>
                   ))}
@@ -540,7 +602,9 @@ export default function PortariaPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Total ({qtdTotal} {qtdTotal === 1 ? 'item' : 'itens'})</span>
                 <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-space-mono)' }}>
-                  R$ {total.toFixed(2)}
+                  {moedaAtiva && totalMoeda !== null
+                    ? `${moedaAtiva.simbolo}${totalMoeda.toFixed(2)}`
+                    : `R$ ${total.toFixed(2)}`}
                 </span>
               </div>
             </div>
